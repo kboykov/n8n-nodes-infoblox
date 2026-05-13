@@ -1,0 +1,10 @@
+# Dependencies and build output.
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editor and OS files.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
