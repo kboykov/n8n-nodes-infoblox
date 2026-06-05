@@ -1,4 +1,4 @@
-import {
+﻿import {
 	NodeConnectionTypes,
 	NodeOperationError,
 	type IDataObject,
@@ -19,15 +19,151 @@ type QueryParameterCollection = {
 };
 
 const CLOUD_ENDPOINTS: Record<string, string> = {
+	// Universal DDI — IPAM & DHCP
 	ipSpace: '/api/ddi/v1/ipam/ip_space',
 	ipAddress: '/api/ddi/v1/ipam/address',
 	addressBlock: '/api/ddi/v1/ipam/address_block',
 	subnet: '/api/ddi/v1/ipam/subnet',
 	dhcpRange: '/api/ddi/v1/ipam/range',
 	fixedAddress: '/api/ddi/v1/dhcp/fixed_address',
+	// Universal DDI — DNS
 	dnsZone: '/api/ddi/v1/dns/auth_zone',
 	dnsRecord: '/api/ddi/v1/dns/record',
+	// BloxOne Threat Defense (atcfw v1)
+	tdAccessCode: '/api/atcfw/v1/access_codes',
+	tdApplicationFilter: '/api/atcfw/v1/application_filters',
+	tdCategoryFilter: '/api/atcfw/v1/category_filters',
+	tdInternalDomainList: '/api/atcfw/v1/internal_domain_lists',
+	tdNamedList: '/api/atcfw/v1/named_lists',
+	tdScheduledReport: '/api/atcfw/v1/scheduled_reports',
+	// DNS Events (dnsdata v2)
+	dnsEvent: '/api/dnsdata/v2/dns_event',
+	// BloxOne Endpoint (atcep v1)
+	epDeviceGroup: '/api/atcep/v1/roaming_device_groups',
+	epRoamingDevice: '/api/atcep/v1/roaming_devices',
+	epVpnProfile: '/api/atcep/v1/vpn_profiles',
+	// DNS Forwarding Proxy (atcdfp v1)
+	dfpService: '/api/atcdfp/v1/dfp_services',
+	// Lookalike Domain Analysis (tdlad v1)
+	ladLookalikeDomain: '/api/tdlad/v1/lookalike_domains',
+	ladLookalikeTarget: '/api/tdlad/v1/lookalike_targets',
+	// Redirect (redirect v1)
+	redirectCustomRedirect: '/api/redirect/v1/custom_redirects',
+	// SOC Insights (v2)
+	socInsight: '/api/v2/insights',
+	// TIDE Dossier & Threat Data
+	tideDossierLookup: '/tide/api/services/intel/lookup/indicator',
+	tideThreat: '/tide/api/data/threats',
+	tideBatch: '/tide/api/data/batches',
+	// Infrastructure (infra v1)
+	infraHost: '/api/infra/v1/hosts',
+	infraService: '/api/infra/v1/services',
+	// Locations (infra v1)
+	location: '/api/infra/v1/locations',
+	// Audit Log (auditlog v1)
+	auditLog: '/api/auditlog/v1/logs',
+	// Service Logs (atlas-logs v2)
+	serviceLog: '/atlas-logs/v2/logs',
+	// Authentication Profiles (authn v1)
+	authnProfileLdap: '/api/authn/v1/profiles/ldap',
+	authnProfileOidc: '/api/authn/v1/profiles/oidc',
+	authnProfileSaml: '/api/authn/v1/profiles/saml',
+	// Global Search (atlas-search-api v1)
+	globalSearch: '/atlas-search-api/v1/search',
+	// NTP Config Service (ntp v1)
+	ntpServiceConfig: '/api/ntp/v1/service/config',
+	// Identity (v2)
+	identityUser: '/v2/users',
+	identityGroup: '/v2/groups',
+	identityCompartment: '/v2/compartments',
+	// DHCP additional resources (ddi v1)
+	dhcpLease: '/api/ddi/v1/dhcp/lease',
+	dhcpFingerprint: '/api/ddi/v1/dhcp/fingerprint',
+	// CDC Data Connector (cdc-flow v1)
+	cdcApplication: '/api/cdc-flow/v1/applications',
+	cdcDestinationHttp: '/api/cdc-flow/v1/destinations/http',
+	cdcDestinationSplunk: '/api/cdc-flow/v1/destinations/splunk',
+	cdcDestinationSyslog: '/api/cdc-flow/v1/destinations/syslog',
+	cdcHost: '/api/cdc-flow/v1/cdcs/hosts',
 };
+
+// Resources that use PUT (full replacement) for updates instead of PATCH (partial)
+const PUT_UPDATE_RESOURCES = new Set([
+	'tdAccessCode',
+	'tdApplicationFilter',
+	'tdCategoryFilter',
+	'tdInternalDomainList',
+	'tdNamedList',
+	'tdScheduledReport',
+	'epDeviceGroup',
+	'epVpnProfile',
+	'dfpService',
+	'redirectCustomRedirect',
+	'tideBatch',
+	'authnProfileLdap',
+	'authnProfileOidc',
+	'authnProfileSaml',
+	'cdcApplication',
+	'cdcDestinationHttp',
+	'cdcDestinationSplunk',
+	'cdcDestinationSyslog',
+	'infraHost',
+	'infraService',
+	'location',
+]);
+
+// Resources where update uses POST (upsert by ID) — e.g. NTP service config
+const POST_UPDATE_RESOURCES = new Set(['ntpServiceConfig']);
+
+// TIDE Data API resources use 'rlimit' instead of '_limit' for pagination
+const TIDE_DATA_RESOURCES = new Set(['tideThreat', 'tideBatch']);
+
+// All cloud resources that use the standard cloudOperation selector (get/getAll/create/update/delete)
+const STANDARD_CLOUD_RESOURCES = [
+	'ipSpace',
+	'ipAddress',
+	'addressBlock',
+	'subnet',
+	'dhcpRange',
+	'fixedAddress',
+	'dnsZone',
+	'dnsRecord',
+	'tdAccessCode',
+	'tdApplicationFilter',
+	'tdCategoryFilter',
+	'tdInternalDomainList',
+	'tdNamedList',
+	'tdScheduledReport',
+	'epDeviceGroup',
+	'epRoamingDevice',
+	'epVpnProfile',
+	'dfpService',
+	'ladLookalikeDomain',
+	'ladLookalikeTarget',
+	'redirectCustomRedirect',
+	'socInsight',
+	'tideBatch',
+	'tideThreat',
+	'auditLog',
+	'authnProfileLdap',
+	'authnProfileOidc',
+	'authnProfileSaml',
+	'cdcApplication',
+	'cdcDestinationHttp',
+	'cdcDestinationSplunk',
+	'cdcDestinationSyslog',
+	'cdcHost',
+	'dhcpFingerprint',
+	'dhcpLease',
+	'identityCompartment',
+	'identityGroup',
+	'identityUser',
+	'infraHost',
+	'infraService',
+	'location',
+	'ntpServiceConfig',
+	'serviceLog',
+];
 
 const cloudOperations: INodeProperties[] = [
 	{
@@ -38,16 +174,7 @@ const cloudOperations: INodeProperties[] = [
 		displayOptions: {
 			show: {
 				platform: ['cloud'],
-				cloudResource: [
-					'ipSpace',
-					'ipAddress',
-					'addressBlock',
-					'subnet',
-					'dhcpRange',
-					'fixedAddress',
-					'dnsZone',
-					'dnsRecord',
-				],
+				cloudResource: STANDARD_CLOUD_RESOURCES,
 			},
 		},
 		options: [
@@ -91,7 +218,7 @@ const cloudOperations: INodeProperties[] = [
 				cloudOperation: ['get', 'update', 'delete'],
 			},
 			hide: {
-				cloudResource: ['custom'],
+				cloudResource: ['custom', 'dnsEvent', 'tideDossierLookup'],
 			},
 		},
 		description: 'The Infoblox resource ID',
@@ -107,7 +234,7 @@ const cloudOperations: INodeProperties[] = [
 				cloudOperation: ['getAll'],
 			},
 			hide: {
-				cloudResource: ['custom'],
+				cloudResource: ['custom', 'dnsEvent', 'tideDossierLookup', 'globalSearch'],
 			},
 		},
 		description: 'Whether to return all results or only up to a given limit',
@@ -127,7 +254,7 @@ const cloudOperations: INodeProperties[] = [
 				returnAll: [false],
 			},
 			hide: {
-				cloudResource: ['custom'],
+				cloudResource: ['custom', 'dnsEvent', 'tideDossierLookup', 'globalSearch'],
 			},
 		},
 		description: 'Max number of results to return',
@@ -143,11 +270,361 @@ const cloudOperations: INodeProperties[] = [
 				cloudOperation: ['create', 'update'],
 			},
 			hide: {
-				cloudResource: ['custom'],
+				cloudResource: ['custom', 'dnsEvent', 'tideDossierLookup'],
 			},
 		},
 		description: 'Request body as JSON',
 	},
+	// DNS Event specific fields
+	{
+		displayName: 'Start Time (T0)',
+		name: 'dnsEventT0',
+		type: 'number',
+		required: true,
+		default: 0,
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['dnsEvent'],
+			},
+		},
+		description: 'Start of time range as a Unix epoch timestamp (seconds)',
+	},
+	{
+		displayName: 'End Time (T1)',
+		name: 'dnsEventT1',
+		type: 'number',
+		required: true,
+		default: 0,
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['dnsEvent'],
+			},
+		},
+		description: 'End of time range as a Unix epoch timestamp (seconds)',
+	},
+	{
+		displayName: 'Return All',
+		name: 'dnsEventReturnAll',
+		type: 'boolean',
+		default: false,
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['dnsEvent'],
+			},
+		},
+		description: 'Whether to return all DNS events or only up to a given limit',
+	},
+	{
+		displayName: 'Limit',
+		name: 'dnsEventLimit',
+		type: 'number',
+		typeOptions: { minValue: 1 },
+		default: 100,
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['dnsEvent'],
+				dnsEventReturnAll: [false],
+			},
+		},
+		description: 'Max number of DNS events to return',
+	},
+	// TIDE Dossier Lookup specific fields
+	{
+		displayName: 'Indicator Type',
+		name: 'dossierIndicatorType',
+		type: 'options',
+		required: true,
+		options: [
+			{ name: 'Email', value: 'email' },
+			{ name: 'Hash', value: 'hash' },
+			{ name: 'Host', value: 'host' },
+			{ name: 'IP Address', value: 'ip' },
+			{ name: 'URL', value: 'url' },
+		],
+		default: 'host',
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['tideDossierLookup'],
+			},
+		},
+		description: 'Type of indicator to look up in the TIDE Dossier',
+	},
+	{
+		displayName: 'Indicator Value',
+		name: 'dossierIndicatorValue',
+		type: 'string',
+		required: true,
+		default: '',
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['tideDossierLookup'],
+			},
+		},
+		description: 'The indicator to look up (domain name, IP address, URL, file hash, or email)',
+	},
+	{
+		displayName: 'Source',
+		name: 'dossierSource',
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['tideDossierLookup'],
+			},
+		},
+		description: 'Optional TIDE source to query. Leave empty to query all available sources.',
+	},
+	{
+		displayName: 'Wait for Results',
+		name: 'dossierWait',
+		type: 'boolean',
+		default: true,
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['tideDossierLookup'],
+			},
+		},
+		description: 'Whether to wait for the Dossier lookup job to complete before returning',
+	},
+	// Global Search specific fields
+	{
+		displayName: 'Search Query',
+		name: 'globalSearchQuery',
+		type: 'string',
+		required: true,
+		default: '',
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['globalSearch'],
+			},
+		},
+		description: 'Search query string (3–300 characters)',
+	},
+	{
+		displayName: 'Additional Options',
+		name: 'globalSearchOptions',
+		type: 'json',
+		default: '{}',
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudResource: ['globalSearch'],
+			},
+		},
+		description:
+			'Optional search parameters as JSON — e.g. filters, limit, offset, highlight, exact_token',
+	},
+	// ── Generic _filter expression (Universal DDI and most CSP list APIs) ──────
+	{
+		displayName: 'Filter Expression',
+		name: 'filterExpression',
+		type: 'string',
+		default: '',
+		placeholder: 'name=="default"',
+		displayOptions: {
+			show: {
+				platform: ['cloud'],
+				cloudOperation: ['getAll'],
+				cloudResource: [
+					'ipSpace', 'ipAddress', 'addressBlock', 'subnet', 'dhcpRange', 'fixedAddress',
+					'dnsZone', 'dnsRecord', 'dhcpLease', 'dhcpFingerprint',
+					'location', 'infraHost', 'infraService',
+					'epDeviceGroup', 'epRoamingDevice', 'epVpnProfile',
+					'dfpService', 'ladLookalikeDomain', 'ladLookalikeTarget',
+					'redirectCustomRedirect',
+					'identityUser', 'identityGroup', 'identityCompartment',
+					'cdcApplication', 'cdcDestinationHttp', 'cdcDestinationSplunk', 'cdcDestinationSyslog', 'cdcHost',
+					'tdAccessCode', 'tdApplicationFilter', 'tdCategoryFilter',
+					'tdInternalDomainList', 'tdNamedList', 'tdScheduledReport',
+					'authnProfileLdap', 'authnProfileOidc', 'authnProfileSaml',
+				],
+			},
+		},
+		description:
+			'Infoblox `_filter` expression applied server-side. Example: `name=="default"` or `address=="10.0.0.0"`. Leave empty to return all records.',
+	},
+	// ── DNS Event extra filters ──────────────────────────────────────────────
+	{
+		displayName: 'Query Name',
+		name: 'dnsEventQname',
+		type: 'string',
+		default: '',
+		placeholder: 'malware.example.com',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudResource: ['dnsEvent'] },
+		},
+		description: 'Filter DNS events by the queried domain name',
+	},
+	{
+		displayName: 'Source IP',
+		name: 'dnsEventSrcIp',
+		type: 'string',
+		default: '',
+		placeholder: '192.0.2.10',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudResource: ['dnsEvent'] },
+		},
+		description: 'Filter DNS events by client source IP address',
+	},
+	{
+		displayName: 'Policy Name',
+		name: 'dnsEventPolicy',
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudResource: ['dnsEvent'] },
+		},
+		description: 'Filter DNS events by the security policy that generated them',
+	},
+	{
+		displayName: 'Threat Type',
+		name: 'dnsEventThreatType',
+		type: 'string',
+		default: '',
+		placeholder: 'C&C',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudResource: ['dnsEvent'] },
+		},
+		description: 'Filter DNS events by threat type label (e.g. C&C, Malware, Phishing)',
+	},
+	// ── Audit Log filters ────────────────────────────────────────────────────
+	{
+		displayName: 'Start Date',
+		name: 'auditLogFrom',
+		type: 'string',
+		default: '',
+		placeholder: '2024-01-01T00:00:00Z',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['auditLog'] },
+		},
+		description: 'Return audit entries on or after this ISO 8601 date-time (maps to `t_from`)',
+	},
+	{
+		displayName: 'End Date',
+		name: 'auditLogTo',
+		type: 'string',
+		default: '',
+		placeholder: '2024-12-31T23:59:59Z',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['auditLog'] },
+		},
+		description: 'Return audit entries on or before this ISO 8601 date-time (maps to `t_to`)',
+	},
+	{
+		displayName: 'Username',
+		name: 'auditLogUsername',
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['auditLog'] },
+		},
+		description: 'Filter audit log entries by the user who performed the action',
+	},
+	{
+		displayName: 'Action',
+		name: 'auditLogAction',
+		type: 'string',
+		default: '',
+		placeholder: 'Create',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['auditLog'] },
+		},
+		description: 'Filter audit log entries by action type (e.g. Create, Update, Delete)',
+	},
+	// ── Service Log filters ──────────────────────────────────────────────────
+	{
+		displayName: 'Service Name',
+		name: 'serviceLogService',
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['serviceLog'] },
+		},
+		description: 'Filter service logs by on-prem service name',
+	},
+	{
+		displayName: 'Severity',
+		name: 'serviceLogSeverity',
+		type: 'options',
+		options: [
+			{ name: 'Any', value: '' },
+			{ name: 'Debug', value: 'debug' },
+			{ name: 'Error', value: 'error' },
+			{ name: 'Info', value: 'info' },
+			{ name: 'Warning', value: 'warn' },
+		],
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['serviceLog'] },
+		},
+		description: 'Filter service logs by severity level',
+	},
+	// ── SOC Insight filters ──────────────────────────────────────────────────
+	{
+		displayName: 'Status',
+		name: 'socInsightStatus',
+		type: 'options',
+		options: [
+			{ name: 'Any', value: '' },
+			{ name: 'Active', value: 'Active' },
+			{ name: 'Closed', value: 'Closed' },
+		],
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['socInsight'] },
+		},
+		description: 'Filter SOC Insights by status',
+	},
+	// ── TIDE Threat filters ──────────────────────────────────────────────────
+	{
+		displayName: 'Indicator Type',
+		name: 'tideThreatType',
+		type: 'options',
+		options: [
+			{ name: 'Any', value: '' },
+			{ name: 'Email', value: 'email' },
+			{ name: 'Hash', value: 'hash' },
+			{ name: 'Host', value: 'host' },
+			{ name: 'IP Address', value: 'ip' },
+			{ name: 'URL', value: 'url' },
+		],
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['tideThreat'] },
+		},
+		description: 'Filter TIDE threat records by indicator type',
+	},
+	{
+		displayName: 'Profile',
+		name: 'tideThreatProfile',
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['tideThreat'] },
+		},
+		description: 'Filter TIDE threat records by profile name',
+	},
+	// ── NTP Service Config filter ────────────────────────────────────────────
+	{
+		displayName: 'Service ID',
+		name: 'ntpServiceId',
+		type: 'string',
+		default: '',
+		displayOptions: {
+			show: { platform: ['cloud'], cloudOperation: ['getAll'], cloudResource: ['ntpServiceConfig'] },
+		},
+		description: 'Filter NTP service configurations by the on-prem service ID',
+	},
+	// ── Custom API Request fields ─────────────────────────────────────────────
 	{
 		displayName: 'HTTP Method',
 		name: 'customMethod',
@@ -503,8 +980,7 @@ const queryParameters: INodeProperties[] = [
 				],
 			},
 		],
-		description:
-			'Additional query parameters. For Universal DDI filters, use names like _filter or _fields.',
+		description: 'Additional query parameters. For Universal DDI filters use _filter or _fields; for TIDE use type, host, ip, URL, hash, email, profile.',
 	},
 ];
 
@@ -517,7 +993,7 @@ export class Infoblox implements INodeType {
 		version: 1,
 		subtitle:
 			'={{$parameter["platform"] === "cloud" ? $parameter["cloudResource"] : $parameter["niosResource"]}}',
-		description: 'Work with Infoblox Universal DDI and NIOS WAPI',
+		description: 'Work with Infoblox Universal DDI, Threat Defense, TIDE, and NIOS WAPI',
 		defaults: {
 			name: 'Infoblox',
 		},
@@ -578,20 +1054,130 @@ export class Infoblox implements INodeType {
 						value: 'addressBlock',
 					},
 					{
+						name: 'Audit Log',
+						value: 'auditLog',
+						description: 'Infoblox Portal audit log entry',
+					},
+					{
+						name: 'Auth Profile: LDAP',
+						value: 'authnProfileLdap',
+						description: 'LDAP authentication profile',
+					},
+					{
+						name: 'Auth Profile: OIDC',
+						value: 'authnProfileOidc',
+						description: 'OpenID Connect authentication profile',
+					},
+					{
+						name: 'Auth Profile: SAML',
+						value: 'authnProfileSaml',
+						description: 'SAML 2.0 authentication profile',
+					},
+					{
+						name: 'CDC Application',
+						value: 'cdcApplication',
+						description: 'Cloud Data Connector application configuration',
+					},
+					{
+						name: 'CDC Destination: HTTP',
+						value: 'cdcDestinationHttp',
+						description: 'Cloud Data Connector HTTP destination server',
+					},
+					{
+						name: 'CDC Destination: Splunk',
+						value: 'cdcDestinationSplunk',
+						description: 'Cloud Data Connector Splunk destination server',
+					},
+					{
+						name: 'CDC Destination: Syslog',
+						value: 'cdcDestinationSyslog',
+						description: 'Cloud Data Connector Syslog destination server',
+					},
+					{
+						name: 'CDC Host',
+						value: 'cdcHost',
+						description: 'Host with Cloud Data Connector enabled',
+					},
+					{
 						name: 'Custom API Request',
 						value: 'custom',
 					},
 					{
-						name: 'DNS Authoritative Zone',
-						value: 'dnsZone',
+						name: 'DFP Service',
+						value: 'dfpService',
+						description: 'DNS Forwarding Proxy service configuration',
+					},
+					{
+						name: 'DHCP Fingerprint',
+						value: 'dhcpFingerprint',
+						description: 'DHCP client fingerprint',
+					},
+					{
+						name: 'DHCP Lease',
+						value: 'dhcpLease',
+						description: 'Active DHCP lease',
+					},
+					{
+						name: 'DNS Event',
+						value: 'dnsEvent',
+						description: 'DNS security policy hit events (BloxOne Threat Defense)',
 					},
 					{
 						name: 'DNS Record',
 						value: 'dnsRecord',
 					},
 					{
+						name: 'DNS Zone',
+						value: 'dnsZone',
+					},
+					{
+						name: 'Endpoint Device Group',
+						value: 'epDeviceGroup',
+						description: 'BloxOne Endpoint roaming device group',
+					},
+					{
+						name: 'Endpoint Roaming Device',
+						value: 'epRoamingDevice',
+						description: 'BloxOne Endpoint roaming device',
+					},
+					{
+						name: 'Endpoint VPN Profile',
+						value: 'epVpnProfile',
+						description: 'BloxOne Endpoint VPN profile',
+					},
+					{
 						name: 'Fixed Address',
 						value: 'fixedAddress',
+					},
+					{
+						name: 'Global Search',
+						value: 'globalSearch',
+						description: 'Search across all Infoblox Portal resources',
+					},
+					{
+						name: 'Identity: Compartment',
+						value: 'identityCompartment',
+						description: 'Identity service compartment',
+					},
+					{
+						name: 'Identity: Group',
+						value: 'identityGroup',
+						description: 'Identity service user group',
+					},
+					{
+						name: 'Identity: User',
+						value: 'identityUser',
+						description: 'Identity service user',
+					},
+					{
+						name: 'Infrastructure Host',
+						value: 'infraHost',
+						description: 'Infoblox infrastructure on-prem host',
+					},
+					{
+						name: 'Infrastructure Service',
+						value: 'infraService',
+						description: 'Infoblox infrastructure service (application)',
 					},
 					{
 						name: 'IP Address',
@@ -606,8 +1192,88 @@ export class Infoblox implements INodeType {
 						value: 'dhcpRange',
 					},
 					{
+						name: 'Location',
+						value: 'location',
+						description: 'Physical location for on-prem hosts',
+					},
+					{
+						name: 'Lookalike Domain',
+						value: 'ladLookalikeDomain',
+						description: 'Detected lookalike domain',
+					},
+					{
+						name: 'Lookalike Target',
+						value: 'ladLookalikeTarget',
+						description: 'Target domain monitored for lookalike detection',
+					},
+					{
+						name: 'NTP Service Config',
+						value: 'ntpServiceConfig',
+						description: 'NTP configuration for a service. Use Update with the service ID to create or update.',
+					},
+					{
+						name: 'Redirect: Custom Redirect',
+						value: 'redirectCustomRedirect',
+						description: 'Custom redirect destination for blocked domains',
+					},
+					{
+						name: 'Service Log',
+						value: 'serviceLog',
+						description: 'On-prem host service log entry',
+					},
+					{
+						name: 'SOC Insight',
+						value: 'socInsight',
+						description: 'BloxOne SOC Insight (threat detection insight)',
+					},
+					{
 						name: 'Subnet',
 						value: 'subnet',
+					},
+					{
+						name: 'TD Access Code',
+						value: 'tdAccessCode',
+						description: 'Threat Defense bypass access code',
+					},
+					{
+						name: 'TD Application Filter',
+						value: 'tdApplicationFilter',
+						description: 'Threat Defense application filter',
+					},
+					{
+						name: 'TD Category Filter',
+						value: 'tdCategoryFilter',
+						description: 'Threat Defense content category filter',
+					},
+					{
+						name: 'TD Internal Domain List',
+						value: 'tdInternalDomainList',
+						description: 'Threat Defense internal domain list',
+					},
+					{
+						name: 'TD Named List',
+						value: 'tdNamedList',
+						description: 'Threat Defense named list (allowlist/blocklist)',
+					},
+					{
+						name: 'TD Scheduled Report',
+						value: 'tdScheduledReport',
+						description: 'Threat Defense scheduled report',
+					},
+					{
+						name: 'TIDE Batch',
+						value: 'tideBatch',
+						description: 'TIDE threat batch submission',
+					},
+					{
+						name: 'TIDE Dossier Lookup',
+						value: 'tideDossierLookup',
+						description: 'TIDE Dossier indicator intelligence lookup',
+					},
+					{
+						name: 'TIDE Threat',
+						value: 'tideThreat',
+						description: 'TIDE threat indicator record',
 					},
 				],
 				default: 'ipSpace',
@@ -682,6 +1348,71 @@ export class Infoblox implements INodeType {
 	}
 }
 
+// Resources that support Infoblox _filter expression on list operations
+const FILTER_EXPRESSION_RESOURCES = new Set([
+	'ipSpace', 'ipAddress', 'addressBlock', 'subnet', 'dhcpRange', 'fixedAddress',
+	'dnsZone', 'dnsRecord', 'dhcpLease', 'dhcpFingerprint',
+	'location', 'infraHost', 'infraService',
+	'epDeviceGroup', 'epRoamingDevice', 'epVpnProfile',
+	'dfpService', 'ladLookalikeDomain', 'ladLookalikeTarget',
+	'redirectCustomRedirect',
+	'identityUser', 'identityGroup', 'identityCompartment',
+	'cdcApplication', 'cdcDestinationHttp', 'cdcDestinationSplunk', 'cdcDestinationSyslog', 'cdcHost',
+	'tdAccessCode', 'tdApplicationFilter', 'tdCategoryFilter',
+	'tdInternalDomainList', 'tdNamedList', 'tdScheduledReport',
+	'authnProfileLdap', 'authnProfileOidc', 'authnProfileSaml',
+]);
+
+function getResourceFilters(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+	cloudResource: string,
+): IDataObject {
+	const filters: IDataObject = {};
+
+	if (FILTER_EXPRESSION_RESOURCES.has(cloudResource)) {
+		const expr = executeFunctions.getNodeParameter('filterExpression', itemIndex, '') as string;
+		if (expr) filters._filter = expr;
+	}
+
+	if (cloudResource === 'auditLog') {
+		const from = executeFunctions.getNodeParameter('auditLogFrom', itemIndex, '') as string;
+		const to = executeFunctions.getNodeParameter('auditLogTo', itemIndex, '') as string;
+		const username = executeFunctions.getNodeParameter('auditLogUsername', itemIndex, '') as string;
+		const action = executeFunctions.getNodeParameter('auditLogAction', itemIndex, '') as string;
+		if (from) filters.t_from = from;
+		if (to) filters.t_to = to;
+		if (username) filters.username = username;
+		if (action) filters.action = action;
+	}
+
+	if (cloudResource === 'serviceLog') {
+		const service = executeFunctions.getNodeParameter('serviceLogService', itemIndex, '') as string;
+		const severity = executeFunctions.getNodeParameter('serviceLogSeverity', itemIndex, '') as string;
+		if (service) filters.service_name = service;
+		if (severity) filters.severity = severity;
+	}
+
+	if (cloudResource === 'socInsight') {
+		const status = executeFunctions.getNodeParameter('socInsightStatus', itemIndex, '') as string;
+		if (status) filters.status = status;
+	}
+
+	if (cloudResource === 'tideThreat') {
+		const type = executeFunctions.getNodeParameter('tideThreatType', itemIndex, '') as string;
+		const profile = executeFunctions.getNodeParameter('tideThreatProfile', itemIndex, '') as string;
+		if (type) filters.type = type;
+		if (profile) filters.profile = profile;
+	}
+
+	if (cloudResource === 'ntpServiceConfig') {
+		const serviceId = executeFunctions.getNodeParameter('ntpServiceId', itemIndex, '') as string;
+		if (serviceId) filters.service_id = serviceId;
+	}
+
+	return filters;
+}
+
 async function executeCloudOperation(this: IExecuteFunctions, itemIndex: number): Promise<unknown> {
 	const cloudResource = this.getNodeParameter('cloudResource', itemIndex) as string;
 	const qs = getQueryParameters(this, itemIndex);
@@ -696,14 +1427,33 @@ async function executeCloudOperation(this: IExecuteFunctions, itemIndex: number)
 		return infobloxCloudRequest.call(this, method, endpoint, qs, body);
 	}
 
+	if (cloudResource === 'dnsEvent') {
+		return executeDnsEventQuery.call(this, itemIndex, qs);
+	}
+
+	if (cloudResource === 'tideDossierLookup') {
+		return executeTideDossierLookup.call(this, itemIndex, qs);
+	}
+
+	if (cloudResource === 'globalSearch') {
+		return executeGlobalSearch.call(this, itemIndex, qs);
+	}
+
 	const operation = this.getNodeParameter('cloudOperation', itemIndex) as string;
 	const endpoint = CLOUD_ENDPOINTS[cloudResource];
+	const updateMethod: IHttpRequestMethods = POST_UPDATE_RESOURCES.has(cloudResource)
+		? 'POST'
+		: PUT_UPDATE_RESOURCES.has(cloudResource)
+		? 'PUT'
+		: 'PATCH';
 
 	if (operation === 'getAll') {
 		const returnAll = this.getNodeParameter('returnAll', itemIndex) as boolean;
 		const limit = this.getNodeParameter('limit', itemIndex, 50) as number;
+		const resourceFilters = getResourceFilters(this, itemIndex, cloudResource);
+		const mergedQs = { ...qs, ...resourceFilters };
 
-		return getManyCloudItems.call(this, endpoint, qs, returnAll, limit);
+		return getManyCloudItems.call(this, cloudResource, endpoint, mergedQs, returnAll, limit);
 	}
 
 	if (operation === 'create') {
@@ -713,7 +1463,7 @@ async function executeCloudOperation(this: IExecuteFunctions, itemIndex: number)
 	}
 
 	const resourceId = this.getNodeParameter('resourceId', itemIndex) as string;
-	const itemEndpoint = `${endpoint}/${encodeURIComponent(resourceId)}`;
+	const itemEndpoint = buildCloudItemEndpoint(cloudResource, endpoint, resourceId);
 
 	if (operation === 'get') {
 		return infobloxCloudRequest.call(this, 'GET', itemEndpoint, qs);
@@ -725,9 +1475,105 @@ async function executeCloudOperation(this: IExecuteFunctions, itemIndex: number)
 
 	const body = parseJsonParameter(this.getNodeParameter('jsonBody', itemIndex, {}));
 
-	return infobloxCloudRequest.call(this, 'PATCH', itemEndpoint, qs, body);
+	return infobloxCloudRequest.call(this, updateMethod, itemEndpoint, qs, body);
 }
 
+async function executeDnsEventQuery(
+	this: IExecuteFunctions,
+	itemIndex: number,
+	qs: IDataObject,
+): Promise<unknown> {
+	const t0 = this.getNodeParameter('dnsEventT0', itemIndex) as number;
+	const t1 = this.getNodeParameter('dnsEventT1', itemIndex) as number;
+	const returnAll = this.getNodeParameter('dnsEventReturnAll', itemIndex, false) as boolean;
+	const limit = this.getNodeParameter('dnsEventLimit', itemIndex, 100) as number;
+	const endpoint = CLOUD_ENDPOINTS.dnsEvent;
+
+	const extraFilters: IDataObject = {};
+	const qname = this.getNodeParameter('dnsEventQname', itemIndex, '') as string;
+	const srcIp = this.getNodeParameter('dnsEventSrcIp', itemIndex, '') as string;
+	const policy = this.getNodeParameter('dnsEventPolicy', itemIndex, '') as string;
+	const threatType = this.getNodeParameter('dnsEventThreatType', itemIndex, '') as string;
+	if (qname) extraFilters.qname = qname;
+	if (srcIp) extraFilters.src_ip = srcIp;
+	if (policy) extraFilters.policy_name = policy;
+	if (threatType) extraFilters.threat_type = threatType;
+
+	if (!returnAll) {
+		return infobloxCloudRequest.call(this, 'GET', endpoint, {
+			...qs,
+			...extraFilters,
+			t0,
+			t1,
+			_limit: limit,
+		});
+	}
+
+	const allItems: IDataObject[] = [];
+	const pageSize = 5000;
+	let offset = 0;
+
+	while (true) {
+		const response = await infobloxCloudRequest.call(this, 'GET', endpoint, {
+			...qs,
+			...extraFilters,
+			t0,
+			t1,
+			_limit: pageSize,
+			_offset: offset,
+		});
+		const pageItems = extractList(response);
+
+		if (!pageItems) {
+			return response;
+		}
+
+		allItems.push(...pageItems);
+
+		if (pageItems.length < pageSize) {
+			break;
+		}
+
+		offset += pageItems.length;
+	}
+
+	return allItems;
+}
+
+async function executeTideDossierLookup(
+	this: IExecuteFunctions,
+	itemIndex: number,
+	qs: IDataObject,
+): Promise<unknown> {
+	const indicatorType = this.getNodeParameter('dossierIndicatorType', itemIndex) as string;
+	const indicatorValue = this.getNodeParameter('dossierIndicatorValue', itemIndex) as string;
+	const source = this.getNodeParameter('dossierSource', itemIndex, '') as string;
+	const wait = this.getNodeParameter('dossierWait', itemIndex, true) as boolean;
+
+	const endpoint = `${CLOUD_ENDPOINTS.tideDossierLookup}/${encodeURIComponent(indicatorType)}`;
+	const requestQs: IDataObject = { ...qs, value: indicatorValue, wait: String(wait) };
+
+	if (source) {
+		requestQs.source = source;
+	}
+
+	return infobloxCloudRequest.call(this, 'GET', endpoint, requestQs);
+}
+
+async function executeGlobalSearch(
+	this: IExecuteFunctions,
+	itemIndex: number,
+	qs: IDataObject,
+): Promise<unknown> {
+	const query = this.getNodeParameter('globalSearchQuery', itemIndex) as string;
+	const options = parseJsonParameter(
+		this.getNodeParameter('globalSearchOptions', itemIndex, {}),
+	);
+
+	const body: IDataObject = { query, ...options };
+
+	return infobloxCloudRequest.call(this, 'POST', CLOUD_ENDPOINTS.globalSearch, qs, body);
+}
 async function executeNiosOperation(this: IExecuteFunctions, itemIndex: number): Promise<unknown> {
 	const niosResource = this.getNodeParameter('niosResource', itemIndex) as string;
 	const qs = getQueryParameters(this, itemIndex);
@@ -777,11 +1623,22 @@ async function executeNiosOperation(this: IExecuteFunctions, itemIndex: number):
 
 async function getManyCloudItems(
 	this: IExecuteFunctions,
+	cloudResource: string,
 	endpoint: string,
 	qs: IDataObject,
 	returnAll: boolean,
 	limit: number,
 ): Promise<unknown> {
+	// TIDE Data APIs use 'rlimit' and do not support offset-based pagination
+	if (TIDE_DATA_RESOURCES.has(cloudResource)) {
+		const response = await infobloxCloudRequest.call(this, 'GET', endpoint, {
+			...qs,
+			rlimit: returnAll ? 10000 : limit,
+		});
+
+		return extractList(response) ?? response;
+	}
+
 	if (!returnAll) {
 		const response = await infobloxCloudRequest.call(this, 'GET', endpoint, {
 			...qs,
@@ -932,6 +1789,19 @@ async function infobloxNiosRequest(
 	};
 
 	return this.helpers.httpRequestWithAuthentication.call(this, 'infobloxNiosApi', options);
+}
+
+function buildCloudItemEndpoint(
+	cloudResource: string,
+	endpoint: string,
+	resourceId: string,
+): string {
+	// TIDE threats use /id/{id} path structure for single-record retrieval
+	if (cloudResource === 'tideThreat') {
+		return `${endpoint}/id/${encodeURIComponent(resourceId)}`;
+	}
+
+	return `${endpoint}/${encodeURIComponent(resourceId)}`;
 }
 
 function getQueryParameters(executeFunctions: IExecuteFunctions, itemIndex: number): IDataObject {
