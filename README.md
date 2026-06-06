@@ -1,20 +1,17 @@
 # n8n-nodes-infoblox
 
-A community node for [n8n](https://n8n.io/) that covers the full Infoblox API surface — Universal DDI (IPAM, DHCP, DNS), BloxOne Threat Defense, TIDE threat intelligence, BloxOne Endpoint, SOC Insights, Infrastructure, Identity, and NIOS WAPI.
+A community node for [n8n](https://n8n.io/) covering a broad slice of the Infoblox API surface — Universal DDI (IPAM, DHCP, DNS), Threat Defense, TIDE threat intelligence, Endpoint, SOC Insights, Infrastructure, Identity, CDC, and NIOS WAPI — in a single node.
 
 ## Features
 
-- **Two platforms in one node** — Infoblox Portal (CSP API key) and NIOS WAPI (basic auth).
-- **47 typed Cloud resources** covering IPAM, DHCP, DNS, Threat Defense, Endpoint, Lookalike Detection, Redirect, TIDE, SOC Insights, Infrastructure, Locations, CDC, Audit Log, Service Logs, Auth Profiles, NTP, Identity, and Global Search.
-- **Standard CRUD operations** — Get, Get Many, Create, Update, Delete — for every typed resource.
-- **Structured filters** on Get Many — filter expressions for Universal DDI resources, dedicated filter fields for Audit Log (time range, username, action), DNS Events (qname, src\_ip, policy, threat type), Service Logs (service, severity), SOC Insights (status), TIDE Threat (indicator type, profile), and NTP Service Config (service ID).
-- **Automatic pagination** — Universal DDI via `_limit`/`_offset`, NIOS WAPI via `_paging`/`_page_id`, TIDE via `rlimit`.
-- **Return All** toggle for unbounded result fetching.
-- **Custom API Request** mode on both platforms for any endpoint not yet modeled.
-- **Raw Query Parameters** collection for advanced filtering and field selection.
-- Global, Europe, and custom Infoblox Portal base URLs.
-- Optional SSL certificate validation bypass for self-signed NIOS appliances.
-- Compatible with n8n's `usableAsTool` flag for AI agent workflows.
+- **One node, two APIs.** Infoblox Portal (CSP, token auth) and NIOS WAPI (basic auth) live in a single **Resource** dropdown. There is no separate "platform" selector — picking a resource automatically selects the matching credential.
+- **45+ typed resources** across IPAM, DHCP, DNS, Threat Defense, Endpoint, Lookalike Detection, Redirect, TIDE, SOC Insights, Infrastructure, Locations, CDC, Audit Log, Service Logs, Auth Profiles, NTP, Identity, and Global Search — plus a **Custom API Request** escape hatch for each API.
+- **Per-resource actions.** Every resource exposes only the operations the Infoblox API actually supports (verified against the swagger specs), with meaningful action labels in the Actions panel (e.g. *Create a DNS record*, not *Create a resource*). List-only resources such as logs do not offer create/update/delete.
+- **Dynamic Create/Update fields.** A resource-mapper **Fields** control loads the create/update schema for the selected resource at runtime from the Infoblox swagger specs, so you get typed, validated inputs instead of hand-written JSON. A **JSON Body** field remains available and is merged on top for anything the schema doesn't cover.
+- **Automatic pagination** — Universal DDI via `_limit`/`_offset`, NIOS WAPI via `_paging`/`_page_id`, TIDE via `rlimit` — with a **Return All** toggle.
+- **Structured Get Many filters** where the API supports them, plus a free-form **Query Parameters** collection on every request.
+- Global, Europe, and custom Infoblox Portal realms; optional SSL bypass for self-signed NIOS appliances.
+- Works with n8n's `usableAsTool` flag for AI-agent workflows.
 
 ---
 
@@ -25,6 +22,8 @@ Install as an n8n community node from npm:
 ```bash
 npm install n8n-nodes-infoblox
 ```
+
+Or via the n8n UI: **Settings → Community Nodes → Install** and enter `n8n-nodes-infoblox`.
 
 For local development:
 
@@ -39,21 +38,23 @@ pnpm build
 
 ## Credentials
 
-### Infoblox Portal (CSP)
+The node ships two credential types. The required credential is selected automatically based on the chosen resource.
 
-Used for all Cloud resources. Requires an Infoblox Portal API key.
+### Infoblox Portal API (`infobloxCspApi`)
+
+Used for all Infoblox Portal / Universal DDI / Threat Defense / TIDE resources. Requires a CSP API key.
 
 | Field | Description |
 | --- | --- |
-| API Key | Your CSP API key. Sent as `Authorization: Token <key>`. |
 | Realm | `Global` (`csp.infoblox.com`), `Europe` (`csp.eu.infoblox.com`), or `Custom`. |
 | Custom Base URL | Required when Realm is `Custom`. |
+| API Key | Your CSP API key. Sent as `Authorization: Token <key>`. |
 
-The credential test calls `GET /api/ddi/v1/ipam/ip_space` to verify connectivity.
+Connectivity test: `GET /api/ddi/v1/ipam/ip_space`.
 
-### Infoblox NIOS WAPI
+### Infoblox NIOS API (`infobloxNiosApi`)
 
-Used for NIOS WAPI resources. Uses HTTP basic authentication.
+Used for NIOS WAPI resources. HTTP basic authentication.
 
 | Field | Description |
 | --- | --- |
@@ -62,24 +63,35 @@ Used for NIOS WAPI resources. Uses HTTP basic authentication.
 | Username / Password | Grid Master credentials. |
 | Ignore SSL Issues | Disable TLS verification for self-signed certificates. |
 
-The credential test calls `GET /wapi/v<version>/grid`.
+Connectivity test: `GET /wapi/v<version>/grid`.
 
 ---
 
-## Platform: Infoblox Portal / Universal DDI
+## How the node is structured
 
-Select **Infoblox Portal / Universal DDI** in the Platform field to access the CSP API.
+Pick a **Resource**, then an **Operation**. Most resources share these fields:
 
-All resources share these common operation fields:
-
-| Field | Operations | Description |
+| Field | Shown for | Description |
 | --- | --- | --- |
-| Resource ID | Get, Update, Delete | The CSP resource UUID. |
+| Resource ID | Get, Update, Delete | The Infoblox resource ID. |
 | Return All | Get Many | Fetch all pages automatically. |
-| Limit | Get Many (Return All = false) | Max records to return. |
-| JSON Body | Create, Update | Request body as JSON. |
-| Filter Expression | Get Many (most resources) | Infoblox `_filter` expression, e.g. `name=="default"`. |
+| Limit | Get Many (Return All off) | Max records to return. |
+| Fields | Create, Update | Resource-mapper control whose columns are loaded from the API schema at runtime. |
+| JSON Body | Create, Update | Optional raw JSON, merged over the mapped fields (for fields not in the schema). |
+| Filter Expression | Get Many (supported resources) | Infoblox `_filter` expression, e.g. `name=="default"`. |
 | Query Parameters | All | Raw key/value query parameters appended to every request. |
+
+### Dynamic Create/Update fields (resource mapper)
+
+For create and update operations, the **Fields** control fetches the relevant request-body schema for the selected resource directly from the Infoblox swagger documents (CSP `/apidoc/docs/...`; NIOS GitHub Pages openspec) and presents each property as a typed, mappable column. Schemas are fetched on demand and cached in memory.
+
+If a resource's API exposes no create/update body (for example list-only resources), the control shows a notice and you can fall back to the **JSON Body** field. The fetch requires the credential's host to be reachable from the n8n instance.
+
+---
+
+## Resources — Infoblox Portal
+
+> The endpoint column is the Infoblox Portal API path each resource maps to. Unless noted, resources support full CRUD (**Create, Get, Get Many, Update, Delete**). Update methods follow each API (PATCH for Universal DDI, PUT for most Threat Defense / Infrastructure / CDC / Auth resources, POST for NTP).
 
 ### Universal DDI — IPAM & DHCP
 
@@ -91,17 +103,10 @@ All resources share these common operation fields:
 | Subnet | `/api/ddi/v1/ipam/subnet` | Routable subnet. |
 | IPAM Range | `/api/ddi/v1/ipam/range` | Dynamic DHCP address range. |
 | Fixed Address | `/api/ddi/v1/dhcp/fixed_address` | Static DHCP reservation. |
-| DHCP Lease | `/api/ddi/v1/dhcp/lease` | Active DHCP lease (read-only in practice). |
+| DHCP Lease | `/api/ddi/v1/dhcp/lease` | **Get Many only** (read-only). |
 | DHCP Fingerprint | `/api/ddi/v1/dhcp/fingerprint` | DHCP client fingerprint. |
 
-Filter Expression examples for IPAM resources:
-
-```
-name=="default"
-address=="10.0.0.0"
-cidr>=24
-space=="<space-id>"
-```
+Filter Expression examples: `name=="default"`, `address=="10.0.0.0"`, `cidr>=24`, `space=="<space-id>"`.
 
 ### Universal DDI — DNS
 
@@ -110,225 +115,159 @@ space=="<space-id>"
 | DNS Zone | `/api/ddi/v1/dns/auth_zone` | Authoritative DNS zone. |
 | DNS Record | `/api/ddi/v1/dns/record` | Any DNS record type. |
 
-Filter Expression examples for DNS resources:
+Filter Expression examples: `fqdn=="example.com"`, `name_in_zone=="app1"`, `type=="A"`, `zone=="<zone-id>"`.
 
-```
-fqdn=="example.com"
-name_in_zone=="app1"
-type=="A"
-zone=="<zone-id>"
-```
+### Threat Defense (atcfw v1)
 
-### BloxOne Threat Defense (atcfw v1)
-
-All Threat Defense resources use **PUT** for updates (full replacement).
-
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| TD Access Code | `/api/atcfw/v1/access_codes` | Bypass access code. |
-| TD Application Filter | `/api/atcfw/v1/application_filters` | Application-level traffic filter. |
-| TD Category Filter | `/api/atcfw/v1/category_filters` | Content category filter. |
-| TD Internal Domain List | `/api/atcfw/v1/internal_domain_lists` | Internal domain allowlist. |
-| TD Named List | `/api/atcfw/v1/named_lists` | Named allowlist or blocklist. |
-| TD Scheduled Report | `/api/atcfw/v1/scheduled_reports` | Scheduled threat report. |
-
-Filter Expression example: `name=="corp-allowlist"`.
+| TD Access Code | `/api/atcfw/v1/access_codes` | Create, Get, Get Many, Delete (no update). |
+| TD Application Filter | `/api/atcfw/v1/application_filters` | Full CRUD. |
+| TD Category Filter | `/api/atcfw/v1/category_filters` | Full CRUD. |
+| TD Internal Domain List | `/api/atcfw/v1/internal_domain_lists` | Full CRUD. |
+| TD Named List | `/api/atcfw/v1/named_lists` | Full CRUD. |
+| TD Scheduled Report | `/api/atcfw/v1/scheduled_reports` | Full CRUD. |
+| Redirect: Custom Redirect | `/api/atcfw/v1/custom_redirects` | Custom redirect destination for blocked domains. |
 
 ### DNS Events (dnsdata v2)
 
-DNS Events bypass the standard operation selector. Instead of an Operation field, configure:
+The **DNS Event** resource runs a time-range search (`/api/dnsdata/v2/dns_event`) rather than CRUD. Fields:
 
 | Field | Description |
 | --- | --- |
-| Start Time (T0) | Required. Unix epoch timestamp (seconds) — start of query window. |
-| End Time (T1) | Required. Unix epoch timestamp (seconds) — end of query window. |
-| Return All | Paginate through all matching events. |
-| Limit | Max events to return when Return All is off. |
-| Query Name | Filter by the queried domain name, e.g. `malware.example.com`. |
-| Source IP | Filter by client IP address. |
-| Policy Name | Filter by the security policy that fired. |
-| Threat Type | Filter by threat type label, e.g. `C&C`, `Malware`, `Phishing`. |
+| Start Time | Required. Accepts a date/time or a Unix epoch (seconds); sent as `t0`. |
+| End Time | Required. Accepts a date/time or a Unix epoch (seconds); sent as `t1`. |
+| Return All / Limit | Paginate all matching events, or cap the count. |
+| Query Name | Filter by queried domain name (`qname`). |
+| Query IP | Filter by the IP that made the query (`qip`). |
+| Policy Name | Filter by the security policy that fired (`policy_name`). |
+| Threat Class | Filter by threat class (`threat_class`), e.g. `Malware`, `Phishing`. |
 
-### BloxOne Endpoint (atcep v1)
+Each event is emitted as its own item.
 
-| Resource | Endpoint | Description |
+### Endpoint (atcep v1)
+
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| Endpoint Device Group | `/api/atcep/v1/roaming_device_groups` | Roaming device group. |
-| Endpoint Roaming Device | `/api/atcep/v1/roaming_devices` | Individual roaming device. |
-| Endpoint VPN Profile | `/api/atcep/v1/vpn_profiles` | VPN integration profile. |
-
-Device Groups and VPN Profiles use PUT for updates.
+| Endpoint Device Group | `/api/atcep/v1/roaming_device_groups` | Full CRUD. |
+| Endpoint Roaming Device | `/api/atcep/v1/roaming_devices` | Get, Get Many. |
+| Endpoint VPN Profile | `/api/atcep/v1/vpn_profiles` | Create, Get Many, Update. |
 
 ### DNS Forwarding Proxy (atcdfp v1)
 
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| DFP Service | `/api/atcdfp/v1/dfp_services` | DNS Forwarding Proxy service. Uses PUT for updates. |
+| DFP Service | `/api/atcdfp/v1/dfp_services` | Get Many, Update. |
 
 ### Lookalike Domain Analysis (tdlad v1)
 
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| Lookalike Domain | `/api/tdlad/v1/lookalike_domains` | Detected lookalike domain. |
-| Lookalike Target | `/api/tdlad/v1/lookalike_targets` | Target domain monitored for lookalike attacks. |
-
-### Redirect (redirect v1)
-
-| Resource | Endpoint | Description |
-| --- | --- | --- |
-| Redirect: Custom Redirect | `/api/redirect/v1/custom_redirects` | Custom redirect destination for blocked domains. Uses PUT for updates. |
+| Lookalike Domain | `/api/tdlad/v1/lookalike_domains` | **Get Many only.** |
+| Lookalike Target | `/api/tdlad/v1/lookalike_targets` | **Get Many only.** |
 
 ### SOC Insights (v2)
 
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| SOC Insight | `/api/v2/insights` | Threat detection insight generated by BloxOne SOC. |
-
-**Get Many filter:** Status (`Active` or `Closed`).
+| SOC Insight | `/api/v2/insights` | Get, Get Many. Get Many filter: **Status** (`Active` / `Closed`). |
 
 ### TIDE — Threat Intelligence Data Exchange
 
-TIDE resources share the CSP credential. The base URL is the same CSP host; TIDE uses the `/tide/` path prefix.
+TIDE resources use the Portal credential and the `/tide/` path prefix on the same host.
 
-#### TIDE Dossier Lookup
-
-Performs an indicator intelligence lookup. Instead of standard CRUD fields, configure:
+**TIDE Dossier Lookup** performs an indicator intelligence lookup:
 
 | Field | Description |
 | --- | --- |
 | Indicator Type | `email`, `hash`, `host`, `ip`, or `url`. |
 | Indicator Value | The indicator to look up. |
 | Source | Optional TIDE source name. Leave empty to query all. |
-| Wait for Results | Whether to poll until the lookup job completes. |
+| Wait for Results | Whether to poll until the lookup completes. |
 
-#### TIDE Threat Data
+**TIDE Threat Data:**
 
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| TIDE Threat | `/tide/api/data/threats` | Individual threat indicator record. Uses `rlimit` for pagination (max 10,000). |
-| TIDE Batch | `/tide/api/data/batches` | Threat batch submission. Uses PUT for updates. |
+| TIDE Threat | `/tide/api/data/threats` | **Get Many only.** Get Many filters: Indicator Type, Profile. Uses `rlimit` (max 10,000). |
+| TIDE Batch | `/tide/api/data/batches` | Create, Get, Get Many. |
 
-**TIDE Threat Get Many filters:**
+### Infrastructure & Locations (infra v1)
 
-| Field | Description |
-| --- | --- |
-| Indicator Type | Filter by `host`, `ip`, `url`, `hash`, or `email`. |
-| Profile | Filter by TIDE profile name. |
-
-Single-record Get for TIDE Threat uses the path `/tide/api/data/threats/id/<id>`.
-
-### Infrastructure (infra v1)
-
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| Infrastructure Host | `/api/infra/v1/hosts` | On-prem BloxOne host. Uses PUT for updates. |
-| Infrastructure Service | `/api/infra/v1/services` | Application service running on a host. Uses PUT for updates. |
-
-Filter Expression example: `display_name=="my-host"`.
-
-### Locations (infra v1)
-
-| Resource | Endpoint | Description |
-| --- | --- | --- |
-| Location | `/api/infra/v1/locations` | Physical location associated with on-prem hosts. Uses PUT for updates. |
+| Infrastructure Host | `/api/infra/v1/hosts` | Full CRUD. |
+| Infrastructure Service | `/api/infra/v1/services` | Full CRUD. |
+| Location | `/api/infra/v1/locations` | Full CRUD. |
 
 ### Cloud Data Connector (cdc-flow v1)
 
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| CDC Application | `/api/cdc-flow/v1/applications` | CDC application configuration. Uses PUT for updates. |
-| CDC Destination: HTTP | `/api/cdc-flow/v1/destinations/http` | HTTP/HTTPS destination server. Uses PUT for updates. |
-| CDC Destination: Splunk | `/api/cdc-flow/v1/destinations/splunk` | Splunk HEC destination. Uses PUT for updates. |
-| CDC Destination: Syslog | `/api/cdc-flow/v1/destinations/syslog` | Syslog destination. Uses PUT for updates. |
-| CDC Host | `/api/cdc-flow/v1/cdcs/hosts` | Host with CDC enabled. |
+| CDC Application | `/api/cdc-flow/v1/applications` | Full CRUD. |
+| CDC Destination: HTTP | `/api/cdc-flow/v1/destinations/http` | Full CRUD. |
+| CDC Destination: Splunk | `/api/cdc-flow/v1/destinations/splunk` | Full CRUD. |
+| CDC Destination: Syslog | `/api/cdc-flow/v1/destinations/syslog` | Full CRUD. |
+| CDC Host | `/api/cdc-flow/v1/cdcs/hosts` | Get, Get Many. |
 
-### Audit Log (auditlog v1)
+### Audit Log & Service Logs
 
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| Audit Log | `/api/auditlog/v1/logs` | Portal audit log entries. Read-only in practice. |
-
-**Get Many filters:**
-
-| Field | Description |
-| --- | --- |
-| Start Date | ISO 8601 date-time — lower bound (`t_from`). |
-| End Date | ISO 8601 date-time — upper bound (`t_to`). |
-| Username | Filter by the actor who performed the action. |
-| Action | Filter by action type, e.g. `Create`, `Update`, `Delete`. |
-
-### Service Logs (atlas-logs v2)
-
-| Resource | Endpoint | Description |
-| --- | --- | --- |
-| Service Log | `/atlas-logs/v2/logs` | On-prem host service log entries. |
-
-**Get Many filters:**
-
-| Field | Description |
-| --- | --- |
-| Service Name | Filter by on-prem service name. |
-| Severity | Filter by level: Debug, Info, Warning, or Error. |
+| Audit Log | `/api/auditlog/v1/logs` | **Get Many only.** Filter via the **Filter Expression** field (`_filter`). |
+| Service Log | `/atlas-logs/v2/logs` | **Get Many only.** Filters: Service ID (`service_id`), Container Name (`container_name`), On-Prem Host ID (`ophid`), Start (`start`), End (`end`). |
 
 ### Authentication Profiles (authn v1)
 
-All auth profile resources use PUT for updates.
-
-| Resource | Endpoint | Description |
+| Resource | Endpoint | Notes |
 | --- | --- | --- |
-| Auth Profile: LDAP | `/api/authn/v1/profiles/ldap` | LDAP authentication profile. |
-| Auth Profile: OIDC | `/api/authn/v1/profiles/oidc` | OpenID Connect authentication profile. |
-| Auth Profile: SAML | `/api/authn/v1/profiles/saml` | SAML 2.0 authentication profile. |
+| Auth Profile: LDAP | `/api/authn/v1/profiles/ldap` | Full CRUD. |
+| Auth Profile: OIDC | `/api/authn/v1/profiles/oidc` | Full CRUD. |
+| Auth Profile: SAML | `/api/authn/v1/profiles/saml` | Full CRUD. |
+
+### NTP Service Config (ntp v1)
+
+| Resource | Endpoint | Notes |
+| --- | --- | --- |
+| NTP Service Config | `/api/ntp/v1/service/config` | Get, Get Many, Update, Delete. Update uses POST (upsert). Filter via the **Filter Expression** field. |
+
+### Identity (v2)
+
+| Resource | Endpoint | Notes |
+| --- | --- | --- |
+| Identity: User | `/v2/users` | Full CRUD. |
+| Identity: Group | `/v2/groups` | Full CRUD. |
+| Identity: Compartment | `/v2/compartments` | Create, Get, Get Many, Update (no delete). |
+
+Filter Expression example: `name=="admin"`.
 
 ### Global Search (atlas-search-api v1)
 
-Global Search uses a POST request to query across all Portal resources. Instead of standard CRUD fields, configure:
+The **Global Search** resource POSTs a query across all Portal resources:
 
 | Field | Description |
 | --- | --- |
 | Search Query | Required. Search string (3–300 characters). |
-| Additional Options | Optional JSON object with extra parameters (filters, limit, offset, highlight, exact\_token). |
-
-### NTP Service Config (ntp v1)
-
-| Resource | Endpoint | Description |
-| --- | --- | --- |
-| NTP Service Config | `/api/ntp/v1/service/config` | NTP configuration for an on-prem service. |
-
-NTP Service Config uses POST for both Create and Update (upsert by service ID). Use the **Update** operation with the service ID to create or replace the config.
-
-**Get Many filter:** Service ID — filter by on-prem service identifier.
-
-### Identity (v2)
-
-| Resource | Endpoint | Description |
-| --- | --- | --- |
-| Identity: User | `/v2/users` | Portal identity user. |
-| Identity: Group | `/v2/groups` | Portal identity group. |
-| Identity: Compartment | `/v2/compartments` | Portal identity compartment. |
-
-Filter Expression example: `name=="admin"`.
+| Additional Options | Optional JSON object (filters, limit, offset, highlight, exact_token). |
 
 ### Custom API Request
 
-Select **Custom API Request** to call any CSP endpoint not covered by the typed resources.
+The **Custom API Request** resource calls any CSP endpoint not covered above:
 
 | Field | Description |
 | --- | --- |
 | HTTP Method | GET, POST, PUT, PATCH, or DELETE. |
 | Endpoint | Path (e.g. `/api/ddi/v1/ipam/ip_space`) or absolute URL. |
-| JSON Body | Optional request body for POST, PUT, PATCH. |
+| JSON Body | Optional request body for POST/PUT/PATCH. |
 | Query Parameters | Optional key/value query parameters. |
 
 ---
 
-## Platform: NIOS WAPI
+## Resources — NIOS WAPI
 
-Select **NIOS WAPI** in the Platform field to access a classic Infoblox NIOS Grid Master via WAPI.
+### NIOS WAPI Object
 
-### WAPI Object
-
-A generic resource for all WAPI object types:
+A generic resource for any WAPI object type (Create, Get, Get Many, Update, Delete):
 
 | Object Type | WAPI Type |
 | --- | --- |
@@ -348,118 +287,56 @@ A generic resource for all WAPI object types:
 | View | `view` |
 | Custom | Any WAPI type string |
 
-Supported operations:
+- **Get / Update / Delete** operate on a WAPI `_ref`, supplied in the **Object Reference** field, e.g.
+  `record:host/ZG5zLmhvc3Qk...:app1.example.com/default`. Slash-separated segments are individually URL-encoded.
+- **Create / Update** use the **Fields** resource mapper (loaded from the NIOS openspec for the selected object type, by WAPI version) with **JSON Body** as a fallback.
+- **Get Many** paginates with `_paging`, `_return_as_object`, `_max_results`, and `_page_id` when **Return All** is enabled.
 
-- **Get Many** — list objects of the selected type with optional query parameters.
-- **Get** — fetch by WAPI `_ref`.
-- **Create** — create using a JSON body.
-- **Update** — replace by WAPI `_ref` using a JSON body (PUT).
-- **Delete** — delete by WAPI `_ref`.
+### NIOS Custom API Request
 
-The Object Reference field accepts the full `_ref` value returned by NIOS, for example:
-
-```
-record:host/ZG5zLmhvc3QkLl9kZWZhdWx0LmV4YW1wbGUuY29tLmFwcDE:app1.example.com/default
-```
-
-Slash-separated reference segments are individually URL-encoded.
-
-For Get Many, the node uses `_paging`, `_return_as_object`, `_max_results`, and `_page_id` to paginate automatically when **Return All** is enabled.
-
-### Custom API Request (NIOS)
-
-Same as the Cloud Custom Request, but requests are routed to the NIOS Grid Master. Endpoint paths are accepted with or without the `/wapi/v<version>` prefix.
+Sends an arbitrary request to the Grid Master. Endpoint paths are accepted with or without the `/wapi/v<version>` prefix.
 
 ---
 
 ## Query Parameters
 
-The **Query Parameters** collection accepts raw key/value pairs appended to any request. Use it for advanced filtering, field selection, or API-specific controls not covered by the structured filter fields.
+The **Query Parameters** collection appends raw key/value pairs to any request — for field selection, ordering, or controls not exposed as structured fields.
 
-### Universal DDI examples
-
-| Parameter | Example Value | Purpose |
-| --- | --- | --- |
-| `_filter` | `name=="default"` | Server-side filter expression (also set via Filter Expression field) |
-| `_fields` | `id,name,comment` | Return only these fields |
-| `_limit` | `100` | Override page size |
-| `_offset` | `200` | Skip first N results |
-| `_order_by` | `name asc` | Sort results |
-
-### TIDE examples
-
-| Parameter | Example Value | Purpose |
-| --- | --- | --- |
-| `type` | `host` | Filter by indicator type |
-| `profile` | `malware` | Filter by TIDE profile |
-| `detected` | `true` | Return only currently active threats |
-| `rlimit` | `1000` | Max results (max 10,000) |
-
-### NIOS WAPI examples
-
-| Parameter | Example Value | Purpose |
-| --- | --- | --- |
-| `_return_fields` | `name,ipv4addrs` | Return selected fields |
-| `_return_as_object` | `1` | Return WAPI envelope |
-| `_max_results` | `500` | Limit results |
-| `name` | `app1.example.com` | Object-specific search field |
-| `network_view` | `default` | Search within a specific network view |
-| `network` | `10.0.0.0/8` | Filter by parent network |
+| Context | Examples |
+| --- | --- |
+| Universal DDI | `_filter=name=="default"`, `_fields=id,name,comment`, `_order_by=name asc`, `_limit`, `_offset` |
+| TIDE | `type=host`, `profile=malware`, `detected=true`, `rlimit=1000` |
+| NIOS WAPI | `_return_fields=name,ipv4addrs`, `_return_as_object=1`, `_max_results=500`, `name=app1.example.com`, `network_view=default` |
 
 ---
 
-## Example Workflows
+## Example workflows
 
-### List all subnets in an IP Space
+**List all subnets in an IP Space**
+1. Resource: **Subnet** → Operation: **Get Many**
+2. Filter Expression: `space=="<space-id>"`
+3. Return All: enabled
 
-1. Platform: **Infoblox Portal / Universal DDI**
-2. Resource: **Subnet**
-3. Operation: **Get Many**
-4. Filter Expression: `space=="<space-id>"`
-5. Return All: enabled
+**Create a DNS A record**
+1. Resource: **DNS Record** → Operation: **Create**
+2. Fields: set `type` = `A`, `name_in_zone` = `app1`, `zone` = `<zone-id>`, `rdata` = `{ "address": "10.0.0.10" }`
 
-### Look up a threat indicator in TIDE Dossier
-
+**Look up a threat indicator in TIDE Dossier**
 1. Resource: **TIDE Dossier Lookup**
-2. Indicator Type: **Host**
-3. Indicator Value: `malware.example.com`
-4. Wait for Results: enabled
+2. Indicator Type: **Host**, Indicator Value: `malware.example.com`, Wait for Results: enabled
 
-### Query DNS security events for the last hour
-
+**Query DNS security events for the last hour**
 1. Resource: **DNS Event**
-2. Start Time (T0): Unix timestamp for one hour ago
-3. End Time (T1): Unix timestamp for now
-4. Threat Type: `Malware`
-5. Return All: enabled
+2. Start Time: one hour ago, End Time: now
+3. Threat Class: `Malware`, Return All: enabled
 
-### Audit log entries by a specific user
+**Audit log entries via filter expression**
+1. Resource: **Audit Log** → Operation: **Get Many**
+2. Filter Expression: `user_name=="admin@example.com"`
 
-1. Resource: **Audit Log**
-2. Operation: **Get Many**
-3. Start Date: `2024-06-01T00:00:00Z`
-4. Username: `admin@example.com`
-5. Action: `Delete`
-
-### Fetch all active DHCP leases on a subnet
-
-1. Resource: **DHCP Lease**
-2. Operation: **Get Many**
-3. Filter Expression: `state=="used"`
-4. Return All: enabled
-
-### Search across all Portal resources
-
-1. Resource: **Global Search**
-2. Search Query: `app1.example.com`
-
-### Get NIOS host records for a domain
-
-1. Platform: **NIOS WAPI**
-2. Resource: **WAPI Object**
-3. Object Type: **Host Record**
-4. Operation: **Get Many**
-5. Query Parameters: `name = app1.example.com`, `_return_fields = name,ipv4addrs`
+**Get NIOS host records for a domain**
+1. Resource: **NIOS WAPI Object** → Object Type: **Host Record** → Operation: **Get Many**
+2. Query Parameters: `name = app1.example.com`, `_return_fields = name,ipv4addrs`
 
 ---
 
@@ -467,55 +344,56 @@ The **Query Parameters** collection accepts raw key/value pairs appended to any 
 
 ```bash
 pnpm install       # install dependencies
-pnpm build         # compile TypeScript to dist/
-pnpm lint          # run n8n community-node lint rules
+pnpm build         # compile to dist/
+pnpm lint          # n8n community-node lint rules
 pnpm lint:fix      # auto-fix lint errors
 pnpm dev           # watch mode
 ```
 
-The package requires pnpm 11+ and TypeScript 5+. Generated output goes to `dist/` and is not committed.
+Requires pnpm 11+ and TypeScript 5+. Built output goes to `dist/` (the only thing published) and is not committed.
 
 ### Project layout
 
 ```
-.
-├── credentials/
-│   ├── InfobloxCspApi.credentials.ts    # CSP API key credential
-│   └── InfobloxNiosApi.credentials.ts   # NIOS WAPI basic auth credential
-├── nodes/
-│   └── Infoblox/
-│       ├── Infoblox.node.ts             # Main node — all resources and logic
-│       ├── Infoblox.node.json           # Node metadata
-│       └── infoblox.svg                 # Node icon
-├── package.json
-├── pnpm-lock.yaml
-└── tsconfig.json
+credentials/
+  InfobloxCspApi.credentials.ts     # CSP token credential
+  InfobloxNiosApi.credentials.ts    # NIOS basic-auth credential
+nodes/Infoblox/
+  Infoblox.node.ts                  # thin entry: description, routing, methods
+  Infoblox.node.json
+  constants.ts                      # endpoints, resource groups, update-method rules
+  types.ts
+  GenericFunctions.ts               # transport, pagination, body/response helpers
+  swagger.ts                        # runtime spec fetch + resource-mapper columns
+  descriptions/                     # resource / operation / field definitions
+    SharedDescription.ts            #   resource selector, shared mapper, query params
+    CloudDescription.ts             #   Portal resources, per-resource operations, fields
+    NiosDescription.ts              #   NIOS object + custom request
+    index.ts
+  actions/                          # execution logic
+    cloud.ts
+    nios.ts
+  infoblox.svg
 ```
 
----
-
-## Security Notes
-
-- Store Infoblox credentials in n8n credentials only — never hardcode API keys.
-- Enable **Ignore SSL Issues** only in lab or controlled environments.
-- Use least-privilege API accounts: read-only accounts for monitoring workflows, write-access only for provisioning workflows.
-- Review JSON bodies before running Create, Update, or Delete operations against production DNS, DHCP, or IPAM data.
+Releases are cut by publishing a GitHub Release tagged with the version; a GitHub Actions workflow then publishes to npm with provenance.
 
 ---
 
-## Limitations
+## Notes & limitations
 
-- The node does not provide typed input fields for every Infoblox object schema. Use JSON Body or Custom API Request for advanced object shapes.
-- Live API behavior depends on your Infoblox product version, enabled modules, and account permissions.
-- OAuth is not implemented. CSP uses API key; NIOS uses basic auth.
-- TIDE pagination is capped at 10,000 records per request (`rlimit` max).
+- The resource mapper covers create/update body schemas. For deeply nested object shapes, the **JSON Body** field (merged over the mapped fields) and **Custom API Request** remain available.
+- Available operations and fields ultimately depend on your Infoblox product version, enabled modules, and account permissions.
+- Authentication is API key (CSP) and basic auth (NIOS); OAuth is not implemented.
+- TIDE list requests are capped at 10,000 records (`rlimit`).
+- Enable **Ignore SSL Issues** only in controlled environments, and prefer least-privilege API accounts (read-only for monitoring, write access only for provisioning).
 
 ---
 
-## API Documentation
+## API documentation
 
 - [Infoblox CSP API Reference](https://csp.infoblox.com/apidoc)
-- [Infoblox NIOS WAPI Guide](https://docs.infoblox.com/)
+- [Infoblox NIOS WAPI / openspec](https://infobloxopen.github.io/nios-swagger/)
 - [n8n Community Nodes Docs](https://docs.n8n.io/integrations/community-nodes/)
 
 ---
