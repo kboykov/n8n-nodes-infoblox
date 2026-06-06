@@ -144,6 +144,7 @@ export const FILTER_EXPRESSION_RESOURCES = [
 	'tdAccessCode', 'tdApplicationFilter', 'tdCategoryFilter',
 	'tdInternalDomainList', 'tdNamedList', 'tdScheduledReport',
 	'authnProfileLdap', 'authnProfileOidc', 'authnProfileSaml',
+	'auditLog', 'ntpServiceConfig',
 ];
 
 export const FILTER_EXPRESSION_RESOURCE_SET = new Set(FILTER_EXPRESSION_RESOURCES);
