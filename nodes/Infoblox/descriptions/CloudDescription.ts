@@ -1,4 +1,4 @@
-import type { INodeProperties } from 'n8n-workflow';
+import type { INodeProperties, INodePropertyOptions } from 'n8n-workflow';
 
 import { FILTER_EXPRESSION_RESOURCES, STANDARD_CLOUD_RESOURCES } from '../constants';
 import { buildResourceMapper } from './SharedDescription';
@@ -7,27 +7,184 @@ import { buildResourceMapper } from './SharedDescription';
 /*                                 Operations                                  */
 /* -------------------------------------------------------------------------- */
 
-const cloudOperationSelectors: INodeProperties[] = [
-	// Standard CRUD operations shared by most cloud resources
-	{
+interface ResourceNoun {
+	singular: string;
+	plural: string;
+	article: string;
+}
+
+/**
+ * Human-readable nouns per resource, used to generate meaningful action labels
+ * for the n8n Actions panel (e.g. "Create a DNS record" instead of the generic
+ * "Create a resource"). Acronyms are kept uppercase so the action-casing lint
+ * rule treats them as exempt; every other word stays lowercase (sentence case).
+ * Nouns follow the terminology used in the Infoblox API documentation.
+ */
+const RESOURCE_NOUNS: Record<string, ResourceNoun> = {
+	ipSpace: { singular: 'IP space', plural: 'IP spaces', article: 'an' },
+	ipAddress: { singular: 'IP address', plural: 'IP addresses', article: 'an' },
+	addressBlock: { singular: 'address block', plural: 'address blocks', article: 'an' },
+	subnet: { singular: 'subnet', plural: 'subnets', article: 'a' },
+	dhcpRange: { singular: 'IPAM range', plural: 'IPAM ranges', article: 'an' },
+	fixedAddress: { singular: 'fixed address', plural: 'fixed addresses', article: 'a' },
+	dnsZone: { singular: 'DNS zone', plural: 'DNS zones', article: 'a' },
+	dnsRecord: { singular: 'DNS record', plural: 'DNS records', article: 'a' },
+	tdAccessCode: { singular: 'TD access code', plural: 'TD access codes', article: 'a' },
+	tdApplicationFilter: {
+		singular: 'TD application filter',
+		plural: 'TD application filters',
+		article: 'a',
+	},
+	tdCategoryFilter: { singular: 'TD category filter', plural: 'TD category filters', article: 'a' },
+	tdInternalDomainList: {
+		singular: 'TD internal domain list',
+		plural: 'TD internal domain lists',
+		article: 'a',
+	},
+	tdNamedList: { singular: 'TD named list', plural: 'TD named lists', article: 'a' },
+	tdScheduledReport: { singular: 'TD scheduled report', plural: 'TD scheduled reports', article: 'a' },
+	epDeviceGroup: { singular: 'roaming device group', plural: 'roaming device groups', article: 'a' },
+	epRoamingDevice: { singular: 'roaming device', plural: 'roaming devices', article: 'a' },
+	epVpnProfile: { singular: 'VPN profile', plural: 'VPN profiles', article: 'a' },
+	dfpService: { singular: 'DFP service', plural: 'DFP services', article: 'a' },
+	ladLookalikeDomain: { singular: 'lookalike domain', plural: 'lookalike domains', article: 'a' },
+	ladLookalikeTarget: { singular: 'lookalike target', plural: 'lookalike targets', article: 'a' },
+	redirectCustomRedirect: { singular: 'custom redirect', plural: 'custom redirects', article: 'a' },
+	socInsight: { singular: 'SOC insight', plural: 'SOC insights', article: 'a' },
+	tideBatch: { singular: 'TIDE batch', plural: 'TIDE batches', article: 'a' },
+	tideThreat: { singular: 'TIDE threat', plural: 'TIDE threats', article: 'a' },
+	auditLog: { singular: 'audit log entry', plural: 'audit log entries', article: 'an' },
+	authnProfileLdap: { singular: 'LDAP auth profile', plural: 'LDAP auth profiles', article: 'an' },
+	authnProfileOidc: { singular: 'OIDC auth profile', plural: 'OIDC auth profiles', article: 'an' },
+	authnProfileSaml: { singular: 'SAML auth profile', plural: 'SAML auth profiles', article: 'a' },
+	cdcApplication: { singular: 'CDC application', plural: 'CDC applications', article: 'a' },
+	cdcDestinationHttp: { singular: 'CDC HTTP destination', plural: 'CDC HTTP destinations', article: 'a' },
+	cdcDestinationSplunk: {
+		singular: 'CDC splunk destination',
+		plural: 'CDC splunk destinations',
+		article: 'a',
+	},
+	cdcDestinationSyslog: {
+		singular: 'CDC syslog destination',
+		plural: 'CDC syslog destinations',
+		article: 'a',
+	},
+	cdcHost: { singular: 'CDC host', plural: 'CDC hosts', article: 'a' },
+	dhcpFingerprint: { singular: 'DHCP fingerprint', plural: 'DHCP fingerprints', article: 'a' },
+	dhcpLease: { singular: 'DHCP lease', plural: 'DHCP leases', article: 'a' },
+	identityCompartment: {
+		singular: 'identity compartment',
+		plural: 'identity compartments',
+		article: 'an',
+	},
+	identityGroup: { singular: 'identity group', plural: 'identity groups', article: 'an' },
+	identityUser: { singular: 'identity user', plural: 'identity users', article: 'an' },
+	infraHost: { singular: 'infrastructure host', plural: 'infrastructure hosts', article: 'an' },
+	infraService: {
+		singular: 'infrastructure service',
+		plural: 'infrastructure services',
+		article: 'an',
+	},
+	location: { singular: 'location', plural: 'locations', article: 'a' },
+	ntpServiceConfig: {
+		singular: 'NTP service configuration',
+		plural: 'NTP service configurations',
+		article: 'an',
+	},
+	serviceLog: { singular: 'service log entry', plural: 'service log entries', article: 'a' },
+};
+
+type CrudOperation = 'create' | 'delete' | 'get' | 'getAll' | 'update';
+
+/** Display order for the CRUD operation options. */
+const CRUD_OPERATION_ORDER: CrudOperation[] = ['create', 'delete', 'get', 'getAll', 'update'];
+
+/**
+ * Resources that do not support the full CRUD set. The listed operations are the
+ * only ones exposed by the Infoblox API for that resource (verified against the
+ * swagger specs); resources not listed here support all five operations. This
+ * keeps the Actions panel honest — e.g. logs are list-only, not create/delete.
+ */
+const RESOURCE_OPERATIONS: Record<string, CrudOperation[]> = {
+	tdAccessCode: ['create', 'delete', 'get', 'getAll'],
+	epRoamingDevice: ['get', 'getAll'],
+	epVpnProfile: ['create', 'getAll', 'update'],
+	dfpService: ['getAll', 'update'],
+	ladLookalikeDomain: ['getAll'],
+	ladLookalikeTarget: ['getAll'],
+	socInsight: ['get', 'getAll'],
+	tideThreat: ['getAll'],
+	tideBatch: ['create', 'get', 'getAll'],
+	auditLog: ['getAll'],
+	serviceLog: ['getAll'],
+	ntpServiceConfig: ['delete', 'get', 'getAll', 'update'],
+	identityCompartment: ['create', 'get', 'getAll', 'update'],
+	dhcpLease: ['getAll'],
+	cdcHost: ['get', 'getAll'],
+};
+
+/** Build a per-resource CRUD operation selector with meaningful action labels. */
+function buildCloudCrudSelector(resource: string): INodeProperties {
+	const { singular, plural, article } = RESOURCE_NOUNS[resource] ?? {
+		singular: 'resource',
+		plural: 'resources',
+		article: 'a',
+	};
+
+	const allOptions: Record<CrudOperation, INodePropertyOptions> = {
+		create: {
+			name: 'Create',
+			value: 'create',
+			action: `Create ${article} ${singular}`,
+			description: `Create a new ${singular}`,
+		},
+		delete: {
+			name: 'Delete',
+			value: 'delete',
+			action: `Delete ${article} ${singular}`,
+			description: `Delete ${article} ${singular} by ID`,
+		},
+		get: {
+			name: 'Get',
+			value: 'get',
+			action: `Get ${article} ${singular}`,
+			description: `Get ${article} ${singular} by ID`,
+		},
+		getAll: {
+			name: 'Get Many',
+			value: 'getAll',
+			action: `Get many ${plural}`,
+			description: `Retrieve many ${plural}`,
+		},
+		update: {
+			name: 'Update',
+			value: 'update',
+			action: `Update ${article} ${singular}`,
+			description: `Update ${article} ${singular} by ID`,
+		},
+	};
+
+	const allowed = RESOURCE_OPERATIONS[resource] ?? CRUD_OPERATION_ORDER;
+	const options = CRUD_OPERATION_ORDER.filter((op) => allowed.includes(op)).map(
+		(op) => allOptions[op],
+	);
+
+	return {
 		displayName: 'Operation',
 		name: 'operation',
 		type: 'options',
 		noDataExpression: true,
-		displayOptions: {
-			show: {
-				resource: STANDARD_CLOUD_RESOURCES,
-			},
-		},
-		options: [
-			{ name: 'Create', value: 'create', action: 'Create a resource' },
-			{ name: 'Delete', value: 'delete', action: 'Delete a resource' },
-			{ name: 'Get', value: 'get', action: 'Get a resource' },
-			{ name: 'Get Many', value: 'getAll', action: 'Get many resources' },
-			{ name: 'Update', value: 'update', action: 'Update a resource' },
-		],
+		displayOptions: { show: { resource: [resource] } },
+		options,
+		// Every cloud resource supports listing, so "Get Many" is always a safe default.
 		default: 'getAll',
-	},
+	};
+}
+
+const cloudOperationSelectors: INodeProperties[] = [
+	// Per-resource CRUD selectors — one per resource so the Actions panel shows a
+	// meaningful label (e.g. "Create a DNS record") instead of a generic placeholder.
+	...STANDARD_CLOUD_RESOURCES.map(buildCloudCrudSelector),
 	// DNS Event — time-range query
 	{
 		displayName: 'Operation',
@@ -155,22 +312,24 @@ const cloudCrudFields: INodeProperties[] = [
 
 const dnsEventFields: INodeProperties[] = [
 	{
-		displayName: 'Start Time (T0)',
+		displayName: 'Start Time',
 		name: 'dnsEventT0',
-		type: 'number',
+		type: 'dateTime',
 		required: true,
-		default: 0,
+		default: '',
 		displayOptions: { show: { resource: ['dnsEvent'] } },
-		description: 'Start of time range as a Unix epoch timestamp (seconds)',
+		description:
+			'Start of the time range (inclusive). Accepts a date/time or a Unix epoch in seconds; sent to the API as `t0`.',
 	},
 	{
-		displayName: 'End Time (T1)',
+		displayName: 'End Time',
 		name: 'dnsEventT1',
-		type: 'number',
+		type: 'dateTime',
 		required: true,
-		default: 0,
+		default: '',
 		displayOptions: { show: { resource: ['dnsEvent'] } },
-		description: 'End of time range as a Unix epoch timestamp (seconds)',
+		description:
+			'End of the time range (exclusive). Accepts a date/time or a Unix epoch in seconds; sent to the API as `t1`.',
 	},
 	{
 		displayName: 'Return All',
@@ -196,16 +355,16 @@ const dnsEventFields: INodeProperties[] = [
 		default: '',
 		placeholder: 'malware.example.com',
 		displayOptions: { show: { resource: ['dnsEvent'] } },
-		description: 'Filter DNS events by the queried domain name',
+		description: 'Filter by the queried domain name (`qname`)',
 	},
 	{
-		displayName: 'Source IP',
-		name: 'dnsEventSrcIp',
+		displayName: 'Query IP',
+		name: 'dnsEventQip',
 		type: 'string',
 		default: '',
 		placeholder: '192.0.2.10',
 		displayOptions: { show: { resource: ['dnsEvent'] } },
-		description: 'Filter DNS events by client source IP address',
+		description: 'Filter by the IP address that made the query (`qip`)',
 	},
 	{
 		displayName: 'Policy Name',
@@ -213,16 +372,16 @@ const dnsEventFields: INodeProperties[] = [
 		type: 'string',
 		default: '',
 		displayOptions: { show: { resource: ['dnsEvent'] } },
-		description: 'Filter DNS events by the security policy that generated them',
+		description: 'Filter by the security policy that generated the event (`policy_name`)',
 	},
 	{
-		displayName: 'Threat Type',
-		name: 'dnsEventThreatType',
+		displayName: 'Threat Class',
+		name: 'dnsEventThreatClass',
 		type: 'string',
 		default: '',
-		placeholder: 'C&C',
+		placeholder: 'Malware',
 		displayOptions: { show: { resource: ['dnsEvent'] } },
-		description: 'Filter DNS events by threat type label (e.g. C&C, Malware, Phishing)',
+		description: 'Filter by threat class (`threat_class`), e.g. Malware, Phishing, MalwareC2',
 	},
 ];
 
@@ -304,65 +463,47 @@ const globalSearchFields: INodeProperties[] = [
 /* -------------------------------------------------------------------------- */
 
 const cloudFilterFields: INodeProperties[] = [
-	// Audit Log
-	{
-		displayName: 'Start Date',
-		name: 'auditLogFrom',
-		type: 'string',
-		default: '',
-		placeholder: '2024-01-01T00:00:00Z',
-		displayOptions: { show: { operation: ['getAll'], resource: ['auditLog'] } },
-		description: 'Return audit entries on or after this ISO 8601 date-time (maps to `t_from`)',
-	},
-	{
-		displayName: 'End Date',
-		name: 'auditLogTo',
-		type: 'string',
-		default: '',
-		placeholder: '2024-12-31T23:59:59Z',
-		displayOptions: { show: { operation: ['getAll'], resource: ['auditLog'] } },
-		description: 'Return audit entries on or before this ISO 8601 date-time (maps to `t_to`)',
-	},
-	{
-		displayName: 'Username',
-		name: 'auditLogUsername',
-		type: 'string',
-		default: '',
-		displayOptions: { show: { operation: ['getAll'], resource: ['auditLog'] } },
-		description: 'Filter audit log entries by the user who performed the action',
-	},
-	{
-		displayName: 'Action',
-		name: 'auditLogAction',
-		type: 'string',
-		default: '',
-		placeholder: 'Create',
-		displayOptions: { show: { operation: ['getAll'], resource: ['auditLog'] } },
-		description: 'Filter audit log entries by action type (e.g. Create, Update, Delete)',
-	},
+	// Audit Log — uses the shared Filter Expression field (the API only supports `_filter`)
 	// Service Log
 	{
-		displayName: 'Service Name',
-		name: 'serviceLogService',
+		displayName: 'Service ID',
+		name: 'serviceLogServiceId',
 		type: 'string',
 		default: '',
 		displayOptions: { show: { operation: ['getAll'], resource: ['serviceLog'] } },
-		description: 'Filter service logs by on-prem service name',
+		description: 'Filter logs by service ID (`service_id`)',
 	},
 	{
-		displayName: 'Severity',
-		name: 'serviceLogSeverity',
-		type: 'options',
-		options: [
-			{ name: 'Any', value: '' },
-			{ name: 'Debug', value: 'debug' },
-			{ name: 'Error', value: 'error' },
-			{ name: 'Info', value: 'info' },
-			{ name: 'Warning', value: 'warn' },
-		],
+		displayName: 'Container Name',
+		name: 'serviceLogContainerName',
+		type: 'string',
 		default: '',
 		displayOptions: { show: { operation: ['getAll'], resource: ['serviceLog'] } },
-		description: 'Filter service logs by severity level',
+		description: 'Filter logs by the service container name (`container_name`)',
+	},
+	{
+		displayName: 'On-Prem Host ID',
+		name: 'serviceLogOphid',
+		type: 'string',
+		default: '',
+		displayOptions: { show: { operation: ['getAll'], resource: ['serviceLog'] } },
+		description: "Filter logs by the on-prem host's ID (`ophid`)",
+	},
+	{
+		displayName: 'Start',
+		name: 'serviceLogStart',
+		type: 'dateTime',
+		default: '',
+		displayOptions: { show: { operation: ['getAll'], resource: ['serviceLog'] } },
+		description: 'Only include logs from this moment forward (`start`)',
+	},
+	{
+		displayName: 'End',
+		name: 'serviceLogEnd',
+		type: 'dateTime',
+		default: '',
+		displayOptions: { show: { operation: ['getAll'], resource: ['serviceLog'] } },
+		description: 'Only include logs up to this moment (`end`)',
 	},
 	// SOC Insight
 	{
@@ -403,15 +544,7 @@ const cloudFilterFields: INodeProperties[] = [
 		displayOptions: { show: { operation: ['getAll'], resource: ['tideThreat'] } },
 		description: 'Filter TIDE threat records by profile name',
 	},
-	// NTP Service Config
-	{
-		displayName: 'Service ID',
-		name: 'ntpServiceId',
-		type: 'string',
-		default: '',
-		displayOptions: { show: { operation: ['getAll'], resource: ['ntpServiceConfig'] } },
-		description: 'Filter NTP service configurations by the on-prem service ID',
-	},
+	// NTP Service Config — uses the shared Filter Expression field (the API only supports `_filter`)
 ];
 
 /* -------------------------------------------------------------------------- */

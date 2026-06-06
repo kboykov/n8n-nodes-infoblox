@@ -89,22 +89,21 @@ function getResourceFilters(
 		if (expr) filters._filter = expr;
 	}
 
-	if (cloudResource === 'auditLog') {
-		const from = executeFunctions.getNodeParameter('auditLogFrom', itemIndex, '') as string;
-		const to = executeFunctions.getNodeParameter('auditLogTo', itemIndex, '') as string;
-		const username = executeFunctions.getNodeParameter('auditLogUsername', itemIndex, '') as string;
-		const action = executeFunctions.getNodeParameter('auditLogAction', itemIndex, '') as string;
-		if (from) filters.t_from = from;
-		if (to) filters.t_to = to;
-		if (username) filters.username = username;
-		if (action) filters.action = action;
-	}
-
 	if (cloudResource === 'serviceLog') {
-		const service = executeFunctions.getNodeParameter('serviceLogService', itemIndex, '') as string;
-		const severity = executeFunctions.getNodeParameter('serviceLogSeverity', itemIndex, '') as string;
-		if (service) filters.service_name = service;
-		if (severity) filters.severity = severity;
+		const serviceId = executeFunctions.getNodeParameter('serviceLogServiceId', itemIndex, '') as string;
+		const containerName = executeFunctions.getNodeParameter(
+			'serviceLogContainerName',
+			itemIndex,
+			'',
+		) as string;
+		const ophid = executeFunctions.getNodeParameter('serviceLogOphid', itemIndex, '') as string;
+		const start = executeFunctions.getNodeParameter('serviceLogStart', itemIndex, '') as string;
+		const end = executeFunctions.getNodeParameter('serviceLogEnd', itemIndex, '') as string;
+		if (serviceId) filters.service_id = serviceId;
+		if (containerName) filters.container_name = containerName;
+		if (ophid) filters.ophid = ophid;
+		if (start) filters.start = start;
+		if (end) filters.end = end;
 	}
 
 	if (cloudResource === 'socInsight') {
@@ -119,9 +118,51 @@ function getResourceFilters(
 		if (profile) filters.profile = profile;
 	}
 
-	if (cloudResource === 'ntpServiceConfig') {
-		const serviceId = executeFunctions.getNodeParameter('ntpServiceId', itemIndex, '') as string;
-		if (serviceId) filters.service_id = serviceId;
+	return filters;
+}
+
+/** Convert a date/time value or epoch into Unix epoch seconds. */
+function toEpochSeconds(value: unknown): number {
+	const fromNumber = (input: number): number =>
+		input > 1e12 ? Math.floor(input / 1000) : Math.floor(input);
+
+	if (typeof value === 'number' && !Number.isNaN(value)) {
+		return fromNumber(value);
+	}
+
+	if (typeof value === 'string' && value.trim() !== '') {
+		const numeric = Number(value);
+		if (!Number.isNaN(numeric)) {
+			return fromNumber(numeric);
+		}
+
+		const parsed = Date.parse(value);
+		if (!Number.isNaN(parsed)) {
+			return Math.floor(parsed / 1000);
+		}
+	}
+
+	return 0;
+}
+
+/** Collect the DNS event convenience filters into a query-string object. */
+function getDnsEventFilters(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): IDataObject {
+	const filters: IDataObject = {};
+	const mapping: Array<[string, string]> = [
+		['dnsEventQname', 'qname'],
+		['dnsEventQip', 'qip'],
+		['dnsEventPolicy', 'policy_name'],
+		['dnsEventThreatClass', 'threat_class'],
+	];
+
+	for (const [parameter, key] of mapping) {
+		const value = executeFunctions.getNodeParameter(parameter, itemIndex, '') as string;
+		if (value) {
+			filters[key] = value;
+		}
 	}
 
 	return filters;
@@ -133,42 +174,29 @@ async function executeDnsEventQuery(
 	itemIndex: number,
 	qs: IDataObject,
 ): Promise<unknown> {
-	const t0 = this.getNodeParameter('dnsEventT0', itemIndex) as number;
-	const t1 = this.getNodeParameter('dnsEventT1', itemIndex) as number;
+	const t0 = toEpochSeconds(this.getNodeParameter('dnsEventT0', itemIndex));
+	const t1 = toEpochSeconds(this.getNodeParameter('dnsEventT1', itemIndex));
 	const returnAll = this.getNodeParameter('dnsEventReturnAll', itemIndex, false) as boolean;
 	const limit = this.getNodeParameter('dnsEventLimit', itemIndex, 100) as number;
 	const endpoint = CLOUD_ENDPOINTS.dnsEvent;
-
-	const extraFilters: IDataObject = {};
-	const qname = this.getNodeParameter('dnsEventQname', itemIndex, '') as string;
-	const srcIp = this.getNodeParameter('dnsEventSrcIp', itemIndex, '') as string;
-	const policy = this.getNodeParameter('dnsEventPolicy', itemIndex, '') as string;
-	const threatType = this.getNodeParameter('dnsEventThreatType', itemIndex, '') as string;
-	if (qname) extraFilters.qname = qname;
-	if (srcIp) extraFilters.src_ip = srcIp;
-	if (policy) extraFilters.policy_name = policy;
-	if (threatType) extraFilters.threat_type = threatType;
+	const baseQs: IDataObject = { ...qs, ...getDnsEventFilters(this, itemIndex), t0, t1 };
 
 	if (!returnAll) {
-		return infobloxCloudRequest.call(this, 'GET', endpoint, {
-			...qs,
-			...extraFilters,
-			t0,
-			t1,
+		const response = await infobloxCloudRequest.call(this, 'GET', endpoint, {
+			...baseQs,
 			_limit: limit,
 		});
+
+		return extractList(response) ?? response;
 	}
 
 	const allItems: IDataObject[] = [];
-	const pageSize = 5000;
+	const pageSize = 1000;
 	let offset = 0;
 
 	while (true) {
 		const response = await infobloxCloudRequest.call(this, 'GET', endpoint, {
-			...qs,
-			...extraFilters,
-			t0,
-			t1,
+			...baseQs,
 			_limit: pageSize,
 			_offset: offset,
 		});
