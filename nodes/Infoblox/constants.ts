@@ -32,8 +32,8 @@ export const CLOUD_ENDPOINTS: Record<string, string> = {
 	// Lookalike Domain Analysis (tdlad v1)
 	ladLookalikeDomain: '/api/tdlad/v1/lookalike_domains',
 	ladLookalikeTarget: '/api/tdlad/v1/lookalike_targets',
-	// Redirect (redirect v1)
-	redirectCustomRedirect: '/api/redirect/v1/custom_redirects',
+	// Redirect (served under atcfw v1)
+	redirectCustomRedirect: '/api/atcfw/v1/custom_redirects',
 	// SOC Insights (v2)
 	socInsight: '/api/v2/insights',
 	// TIDE Dossier & Threat Data

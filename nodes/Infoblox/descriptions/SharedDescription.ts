@@ -65,6 +65,39 @@ export const resourceSelector: INodeProperties = {
 	default: 'ipSpace',
 };
 
+/**
+ * A resource-mapper field whose columns are loaded at runtime from the matching
+ * Infoblox swagger spec (see `getMappingColumns`). Shown for create/update on the
+ * given resources; the raw JSON Body field stays available as an escape hatch.
+ */
+export function buildResourceMapper(resources: string[]): INodeProperties {
+	return {
+		displayName: 'Fields',
+		name: 'dataFields',
+		type: 'resourceMapper',
+		default: { mappingMode: 'defineBelow', value: null },
+		noDataExpression: true,
+		required: true,
+		typeOptions: {
+			loadOptionsDependsOn: ['resource', 'operation', 'objectType', 'customObjectType'],
+			resourceMapper: {
+				resourceMapperMethod: 'getMappingColumns',
+				mode: 'add',
+				fieldWords: { singular: 'field', plural: 'fields' },
+				addAllFields: false,
+				multiKeyMatch: false,
+				supportAutoMap: true,
+			},
+		},
+		displayOptions: {
+			show: {
+				resource: resources,
+				operation: ['create', 'update'],
+			},
+		},
+	};
+}
+
 /** Free-form query parameters appended to every request. */
 export const queryParameters: INodeProperties[] = [
 	{
