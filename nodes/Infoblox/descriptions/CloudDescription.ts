@@ -1,6 +1,7 @@
 import type { INodeProperties } from 'n8n-workflow';
 
 import { FILTER_EXPRESSION_RESOURCES, STANDARD_CLOUD_RESOURCES } from '../constants';
+import { buildResourceMapper } from './SharedDescription';
 
 /* -------------------------------------------------------------------------- */
 /*                                 Operations                                  */
@@ -116,6 +117,7 @@ const cloudCrudFields: INodeProperties[] = [
 		},
 		description: 'Max number of results to return',
 	},
+	buildResourceMapper(STANDARD_CLOUD_RESOURCES),
 	{
 		displayName: 'JSON Body',
 		name: 'jsonBody',
@@ -127,7 +129,8 @@ const cloudCrudFields: INodeProperties[] = [
 				operation: ['create', 'update'],
 			},
 		},
-		description: 'Request body as JSON',
+		description:
+			'Additional request body as JSON, merged over the mapped fields above. Use for fields not present in the API schema, or when no schema is available.',
 	},
 	{
 		displayName: 'Filter Expression',

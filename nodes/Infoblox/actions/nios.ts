@@ -1,6 +1,7 @@
 import type { IExecuteFunctions, IHttpRequestMethods } from 'n8n-workflow';
 
 import {
+	buildMappedBody,
 	encodeWapiReference,
 	getManyNiosItems,
 	getNiosObjectType,
@@ -39,7 +40,7 @@ export async function executeNiosOperation(
 
 	if (operation === 'create') {
 		const objectType = getNiosObjectType(this, itemIndex);
-		const body = parseJsonParameter(this.getNodeParameter('jsonBody', itemIndex, {}));
+		const body = buildMappedBody(this, itemIndex);
 
 		return infobloxNiosRequest.call(this, 'POST', `/${encodeURIComponent(objectType)}`, qs, body);
 	}
@@ -56,7 +57,7 @@ export async function executeNiosOperation(
 	}
 
 	// update
-	const body = parseJsonParameter(this.getNodeParameter('jsonBody', itemIndex, {}));
+	const body = buildMappedBody(this, itemIndex);
 
 	return infobloxNiosRequest.call(this, 'PUT', endpoint, qs, body);
 }

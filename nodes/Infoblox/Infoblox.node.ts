@@ -12,6 +12,7 @@ import { executeNiosOperation } from './actions/nios';
 import { ALL_CLOUD_RESOURCES, NIOS_RESOURCES } from './constants';
 import { nodeProperties } from './descriptions';
 import { toOutputItems } from './GenericFunctions';
+import { getMappingColumns } from './swagger';
 
 const NIOS_RESOURCE_SET = new Set(NIOS_RESOURCES);
 
@@ -51,6 +52,12 @@ export class Infoblox implements INodeType {
 			},
 		],
 		properties: nodeProperties,
+	};
+
+	methods = {
+		resourceMapping: {
+			getMappingColumns,
+		},
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {

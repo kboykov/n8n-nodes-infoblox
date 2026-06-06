@@ -242,6 +242,22 @@ export function buildCloudItemEndpoint(
 	return `${endpoint}/${encodeURIComponent(resourceId)}`;
 }
 
+/**
+ * Build a request body for create/update operations: the resource-mapper fields
+ * (loaded at runtime from the swagger spec) with the raw JSON Body merged on top
+ * so it can override or supply fields the schema does not cover.
+ */
+export function buildMappedBody(
+	executeFunctions: IExecuteFunctions,
+	itemIndex: number,
+): IDataObject {
+	const mapped = executeFunctions.getNodeParameter('dataFields.value', itemIndex, {});
+	const mappedBody = isDataObject(mapped) ? mapped : {};
+	const jsonBody = parseJsonParameter(executeFunctions.getNodeParameter('jsonBody', itemIndex, {}));
+
+	return { ...mappedBody, ...jsonBody };
+}
+
 export function parseJsonParameter(value: unknown): IDataObject {
 	if (value === undefined || value === null || value === '') {
 		return {};

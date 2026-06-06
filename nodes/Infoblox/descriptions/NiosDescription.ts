@@ -1,5 +1,7 @@
 import type { INodeProperties } from 'n8n-workflow';
 
+import { buildResourceMapper } from './SharedDescription';
+
 /* -------------------------------------------------------------------------- */
 /*                                 Operations                                  */
 /* -------------------------------------------------------------------------- */
@@ -101,13 +103,15 @@ const niosObjectFields: INodeProperties[] = [
 		},
 		description: 'Max number of results to return',
 	},
+	buildResourceMapper(['niosObject']),
 	{
 		displayName: 'JSON Body',
 		name: 'jsonBody',
 		type: 'json',
 		default: '{}',
 		displayOptions: { show: { resource: ['niosObject'], operation: ['create', 'update'] } },
-		description: 'Request body as JSON',
+		description:
+			'Additional request body as JSON, merged over the mapped fields above. Use for fields not present in the API schema, or when no schema is available.',
 	},
 ];
 

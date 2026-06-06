@@ -3,6 +3,7 @@ import type { IDataObject, IExecuteFunctions, IHttpRequestMethods } from 'n8n-wo
 import { CLOUD_ENDPOINTS, FILTER_EXPRESSION_RESOURCE_SET, getCloudUpdateMethod } from '../constants';
 import {
 	buildCloudItemEndpoint,
+	buildMappedBody,
 	extractList,
 	getManyCloudItems,
 	getQueryParameters,
@@ -53,7 +54,7 @@ export async function executeCloudOperation(
 	}
 
 	if (operation === 'create') {
-		const body = parseJsonParameter(this.getNodeParameter('jsonBody', itemIndex, {}));
+		const body = buildMappedBody(this, itemIndex);
 
 		return infobloxCloudRequest.call(this, 'POST', endpoint, qs, body);
 	}
@@ -70,7 +71,7 @@ export async function executeCloudOperation(
 	}
 
 	// update
-	const body = parseJsonParameter(this.getNodeParameter('jsonBody', itemIndex, {}));
+	const body = buildMappedBody(this, itemIndex);
 
 	return infobloxCloudRequest.call(this, getCloudUpdateMethod(cloudResource), itemEndpoint, qs, body);
 }
